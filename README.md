@@ -9,6 +9,10 @@
 > **A pixel-perfect, reverse-engineered web preservation of Steve Blanding's classic 1992 MS-DOS platformer.**  
 > Reverse-engineered from original 16-bit real-mode binaries (`PACKRAT.EXE` & `PACKRAT.001`) into modern HTML5 Canvas, Web Audio, and Vanilla JavaScript. Runs instantly in any desktop or mobile browser with zero build steps or runtime dependencies.
 
+<p align="center">
+  <img src="preview.png" alt="The Pack Rat (1992) Gameplay Preview" width="750">
+</p>
+
 ---
 
 ## 📑 Table of Contents

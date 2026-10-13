@@ -209,8 +209,8 @@
       const floorTileY = Math.floor((this.y + this.h + 2) / TILE_SIZE);
       const wallTileY = Math.floor((this.y + this.h / 2) / TILE_SIZE);
 
-      const hasFloor = isTileSolid(getTileAt(checkTileX, floorTileY));
-      const hitsWall = isTileSolid(getTileAt(checkTileX, wallTileY));
+      const hasFloor = isTileFloorSolid(getTileAt(checkTileX, floorTileY));
+      const hitsWall = isTileWallSolid(getTileAt(checkTileX, wallTileY));
 
       if (!hasFloor || hitsWall) {
         this.dir *= -1;
@@ -250,13 +250,13 @@
     }
 
     update() {
-      // Horizontal sliding (ice cubes or crates)
+      // Horizontal sliding/rolling (ice cubes, thread spools, crates)
       if (Math.abs(this.vx) > 0.05) {
         this.x += this.vx;
         this.vx *= 0.90;
         const checkTx = Math.floor((this.vx > 0 ? this.x + 15 : this.x) / TILE_SIZE);
         const checkTy = Math.floor((this.y + 8) / TILE_SIZE);
-        if (isTileSolid(getTileAt(checkTx, checkTy))) {
+        if (isTileWallSolid(getTileAt(checkTx, checkTy))) {
           this.vx = 0;
           this.x = Math.round(this.x / TILE_SIZE) * TILE_SIZE;
         }
@@ -269,7 +269,7 @@
       const feetY = Math.floor((this.y + 16) / TILE_SIZE);
       const tileBelow = getTileAt(centerTx, feetY);
 
-      if (!isTileSolid(tileBelow)) {
+      if (!isTileFloorSolid(tileBelow)) {
         this.falling = true;
         this.vy += 0.35;
         if (this.vy > 6.0) this.vy = 6.0;
@@ -277,7 +277,13 @@
 
         // Snap to grid when landing
         const landTileY = Math.floor((this.y + 16) / TILE_SIZE);
-        if (isTileSolid(getTileAt(centerTx, landTileY))) {
+        const landTile = getTileAt(centerTx, landTileY);
+        if (isTileFloorSolid(landTile)) {
+          // If falling block lands on electric wire (Tile 18)
+          if (landTile === 18) {
+            setTileAt(centerTx, landTileY, 19); // Sparks into 19!
+            sound.play(7); // Zap sound!
+          }
           this.y = (landTileY - 1) * TILE_SIZE;
           this.vy = 0;
           this.vx = 0;
@@ -312,7 +318,7 @@
     vx: 0,
     vy: 0,
     w: 14,
-    h: 22,
+    h: 28,
     facing: 1, // 1 = right, -1 = left
     onGround: false,
     jumping: false,
@@ -324,12 +330,13 @@
     pipeSpeed: 3.5,
     animFrame: 0,
     animTimer: 0,
+    jumpTimer: 0,
     invulnerableTimer: 0,
     dislodgeTimer: 0,
 
     reset(startX, startY) {
       this.x = startX * TILE_SIZE + 1;
-      this.y = startY * TILE_SIZE - (this.h - TILE_SIZE) - 2;
+      this.y = (startY + 1) * TILE_SIZE - this.h;
       this.vx = 0;
       this.vy = 0;
       this.facing = 1;
@@ -339,6 +346,7 @@
       this.lookingUp = false;
       this.lookingDown = false;
       this.inPipe = false;
+      this.jumpTimer = 0;
       this.animFrame = 0;
       this.animTimer = 0;
       this.invulnerableTimer = 60; // 1 second immunity
@@ -492,7 +500,7 @@
     }
     if (matchesAction('suicide', e.code)) {
       if (currentState === GAME_STATE.PLAYING) {
-        killPlayer();
+        killPlayer(4, true);
       }
     }
     if (matchesAction('minimap', e.code)) {
@@ -598,9 +606,11 @@
     }
   }
 
-  // --- Tile Map Helpers ---
+  // --- Authentic Tile Classification (Extracted directly from PACKRAT.EXE) ---
   function getTileAt(tx, ty) {
-    if (tx < 0 || tx >= MAP_W || ty < 0 || ty >= MAP_H) return 1; // Out of bounds is solid brick
+    if (tx < 0 || tx >= MAP_W) return 1; // Left & right screen borders are solid brick walls
+    if (ty < 0) return 0; // Sky above map is open
+    if (ty >= MAP_H) return 0; // Bottom of map is an open pit / void (Photo 2)! NOT solid brick!
     return currentTiles[ty * MAP_W + tx] || 0;
   }
 
@@ -614,35 +624,52 @@
     return currentDestMap[ty * MAP_W + tx] || 0;
   }
 
-  function isTileSolid(id) {
-    // Tile IDs >= 36 are illusionary pass-through tiles
-    if (id >= 36) return false;
-    // Tile 10 is also illusionary brick (secret wall)
-    if (id === 10) return false;
-    // Tile 1 = Brick, Tile 16 = Ice Cube / Stone
-    if (id === 1 || id === 16) return true;
-    // Tile 3..9 = Crates / Movable blocks
+  // Table DS:0x366 from PACKRAT.EXE (vertical floor / standable)
+  function isTileFloorSolid(id) {
+    if (id >= 36) return false; // Illusionary pass-through tiles
+    // 1 = Brick, 10 = Dislodgeable Brick, 16 = Ice Cube/Stone, 17 = Thread Spool
+    // 20 = Left Spool/Pulley, 21 = Red Rubber Band, 22 = Right Spool/Pulley
+    // 3..9 = Movable Crates
+    if (id === 1 || id === 10 || id === 16 || id === 17) return true;
+    if (id === 20 || id === 21 || id === 22) return true;
     if (id >= 3 && id <= 9) return true;
     return false;
   }
 
+  // Table DS:0x3f6 from PACKRAT.EXE (horizontal wall collision)
+  function isTileWallSolid(id) {
+    if (id >= 36) return false; // Illusionary pass-through
+    // Only bricks (1, 10), ice blocks (16), and crates (3..9) block horizontal movement.
+    // Thread spools (17), pulleys (20, 22), and rubber bands (21) do NOT block walking through horizontally!
+    if (id === 1 || id === 10 || id === 16) return true;
+    if (id >= 3 && id <= 9) return true;
+    return false;
+  }
+
+  // Table DS:0x3ae from PACKRAT.EXE (ceiling upward jump collision)
+  function isTileCeilingSolid(id) {
+    if (id >= 36) return false; // Illusionary pass-through
+    // Only bricks (1, 10), ice blocks (16), and crates (3..9) block upward jumping.
+    // Thread spools (17), pulleys (20, 22), and rubber bands (21) allow jumping up through them!
+    if (id === 1 || id === 10 || id === 16) return true;
+    if (id >= 3 && id <= 9) return true;
+    return false;
+  }
+
+  function isTileSolid(id) {
+    return isTileFloorSolid(id);
+  }
+
   function isTileMovable(id) {
     if (id >= 36) return false;
-    // Crates (3..9) and Ice Cubes (16)
-    return (id >= 3 && id <= 9) || id === 16;
+    // Crates (3..9), Brick 10, Ice Cubes (16), Thread Spool (17)
+    return (id >= 3 && id <= 10) || id === 16 || id === 17;
   }
 
   function isTileHazard(id) {
-    // Illusionary tiles (>= 36, such as decoy trap 38) are never lethal
-    if (id >= 36) return false;
-    // Tile 2: Mousetrap
-    // Tile 11..14: Water
-    // Tile 18..19: Electric sparks
-    // Note: Tile 17 is the bouncy rubber column, NOT a hazard!
-    if (id === 2 || (id >= 11 && id <= 14) || id === 18 || id === 19) {
-      return true;
-    }
-    return false;
+    if (id >= 36) return false; // Illusionary decoy tiles are non-lethal
+    // Tile 2: Mousetrap, Tile 11..14: Water, Tile 18: Electric Wire, Tile 19: Sparked Wire
+    return id === 2 || (id >= 11 && id <= 14) || id === 18 || id === 19;
   }
 
   function isTileBauble(id) {
@@ -722,21 +749,36 @@
   // --- Player Actions & Physics ---
   function handleJump() {
     if (player.onGround && !player.inPipe) {
-      player.vy = -6.4;
+      // Check surface under feet (rubber band 21 or thread spool 17 gives extra bounce!)
+      const feetY = Math.floor((player.y + player.h + 1) / TILE_SIZE);
+      const curLeftTile = Math.floor((player.x + 2) / TILE_SIZE);
+      const curRightTile = Math.floor((player.x + player.w - 2) / TILE_SIZE);
+      const footTile = getTileAt(curLeftTile, feetY) || getTileAt(curRightTile, feetY);
+
+      if (footTile === 21) {
+        player.vy = -9.2; // Rubber band trampoline super jump!
+        addSparkles(player.x + player.w / 2, player.y + player.h, '#ff2a7a', 10);
+      } else if (footTile === 17) {
+        player.vy = -8.5; // Thread spool bounce jump!
+        addSparkles(player.x + player.w / 2, player.y + player.h, '#ffd028', 8);
+      } else {
+        player.vy = -6.4; // Normal jump
+        addSparkles(player.x + player.w / 2, player.y + player.h, '#ffffff', 4);
+      }
       player.onGround = false;
       player.jumping = true;
-      sound.play(0); // Jump sound!
-      addSparkles(player.x + player.w / 2, player.y + player.h, '#ffffff', 4);
+      player.jumpTimer = 4; // up to 4 frames of variable jump height
+      sound.play(0); // Jump/spring sound
     }
   }
 
-  function killPlayer() {
-    if (player.invulnerableTimer > 0) return;
+  function killPlayer(soundId = 4, force = false) {
+    if (!force && player.invulnerableTimer > 0) return;
 
     lives--;
     updateHud();
-    sound.play(8); // Trap/hurt snap!
-    addSparkles(player.x + player.w / 2, player.y + player.h / 2, '#ff2a7a', 16);
+    sound.play(soundId);
+    addSparkles(player.x + player.w / 2, player.y + player.h / 2, '#ff2a7a', 20);
 
     if (lives <= 0) {
       gameOver();
@@ -777,7 +819,9 @@
     }, 1800);
   }
 
-  // Dislodge block beneath player or in front of feet when crouching (Crates 3..9 and Ice Cubes 16)
+  // Dislodge block beneath player or in front of feet when crouching
+  // Tile 10 (dislodgeable brick) takes 5 hits; Tile 16 (ice block) takes 3 hits (PACKRAT.EXE 0x3906)
+  const dislodgeHitMap = {};
   function dislodgeBlockBelow() {
     const feetY = Math.floor((player.y + player.h + 2) / TILE_SIZE);
     const txMid = Math.floor((player.x + player.w / 2) / TILE_SIZE);
@@ -790,28 +834,38 @@
 
     for (const testTx of [txMid, txAhead, txRight, txLeft]) {
       const t = getTileAt(testTx, feetY);
-      if (isTileMovable(t)) {
+      if (t === 10 || t === 16 || (t >= 3 && t <= 9)) {
         targetTx = testTx;
         tid = t;
         break;
       }
     }
 
-    if (targetTx >= 0 && isTileMovable(tid)) {
-      setTileAt(targetTx, feetY, 0); // Dislodge! Remove from grid
-      sound.play(5); // Bump sound
-      const pColor = (tid === 16) ? '#00e5ff' : '#ffd028';
-      addSparkles(targetTx * TILE_SIZE + 8, feetY * TILE_SIZE + 8, pColor, 10);
-      movableBlocks.push(new MovableBlock(targetTx, feetY, tid));
+    if (targetTx >= 0) {
+      const key = `${targetTx},${feetY}`;
+      dislodgeHitMap[key] = (dislodgeHitMap[key] || 0) + 1;
+      const reqHits = (tid === 10) ? 5 : (tid === 16 ? 3 : 2);
+
+      if (dislodgeHitMap[key] >= reqHits) {
+        delete dislodgeHitMap[key];
+        setTileAt(targetTx, feetY, 0); // Dislodged! Removed from grid
+        sound.play(5); // Bump / dislodge sound
+        const pColor = (tid === 16) ? '#00e5ff' : '#ffd028';
+        addSparkles(targetTx * TILE_SIZE + 8, feetY * TILE_SIZE + 8, pColor, 12);
+        movableBlocks.push(new MovableBlock(targetTx, feetY, tid));
+      } else {
+        sound.play(5); // Warning bump
+        addSparkles(targetTx * TILE_SIZE + 8, feetY * TILE_SIZE + 4, '#8b2020', 3);
+      }
     }
   }
 
-  // Push movable block in front of player
+  // Push movable block (Thread spools 17 roll on 1 hit; ice cubes 16 push on 3 hits; bricks 10 on 5 hits)
+  const pushHitMap = {};
   function tryPushBlock(dir) {
     const checkX = player.x + (dir > 0 ? player.w + 4 : -4);
     const tx = Math.floor(checkX / TILE_SIZE);
 
-    // Check chest level first, then foot level
     let ty = Math.floor((player.y + player.h / 2) / TILE_SIZE);
     let tid = getTileAt(tx, ty);
     if (!isTileMovable(tid)) {
@@ -820,20 +874,30 @@
     }
 
     if (isTileMovable(tid)) {
-      const destTx = tx + dir;
-      const targetTile = getTileAt(destTx, ty);
-      if (!isTileSolid(targetTile)) {
-        // Space is free! Push the block!
-        setTileAt(tx, ty, 0);
-        sound.play(7); // Push block sound
-        const blk = new MovableBlock(destTx, ty, tid);
-        if (tid === 16) {
-          // Ice cube slides horizontally!
-          blk.vx = dir * 2.2;
-          addSparkles(destTx * TILE_SIZE + 8, ty * TILE_SIZE + 8, '#00e5ff', 6);
+      const key = `${tx},${ty}`;
+      pushHitMap[key] = (pushHitMap[key] || 0) + 1;
+      const reqPushes = (tid === 17) ? 1 : ((tid === 16) ? 3 : ((tid === 10) ? 5 : 2));
+
+      if (pushHitMap[key] >= reqPushes) {
+        delete pushHitMap[key];
+        const destTx = tx + dir;
+        const targetTile = getTileAt(destTx, ty);
+
+        // Can only push into empty air / non-solid spaces (cannot push into solid walls, traps, or rubber bands)
+        if (!isTileWallSolid(targetTile) && targetTile !== 2 && targetTile !== 17 && targetTile !== 20 && targetTile !== 21 && targetTile !== 22) {
+          setTileAt(tx, ty, 0);
+          sound.play(6); // Push block sound
+          const blk = new MovableBlock(destTx, ty, tid);
+          if (tid === 16) {
+            blk.vx = dir * 2.4; // Ice cube slides horizontally!
+            addSparkles(destTx * TILE_SIZE + 8, ty * TILE_SIZE + 8, '#00e5ff', 6);
+          } else if (tid === 17) {
+            blk.vx = dir * 1.5; // Thread spool rolls!
+            addSparkles(destTx * TILE_SIZE + 8, ty * TILE_SIZE + 8, '#ffd028', 6);
+          }
+          movableBlocks.push(blk);
+          player.pushing = true;
         }
-        movableBlocks.push(blk);
-        player.pushing = true;
       }
     }
   }
@@ -962,32 +1026,46 @@
     player.vy += GRAVITY;
     if (player.vy > TERMINAL_VEL) player.vy = TERMINAL_VEL;
 
-    // --- Bouncy Rubber Things (Tile 17) ---
+    // Variable height jumping while jump key is held (authentic DOS feel from PACKRAT.EXE 0x0e23)
+    if (keys.jump && player.jumpTimer > 0 && player.vy < 0) {
+      player.vy -= 0.35;
+      player.jumpTimer--;
+    } else {
+      player.jumpTimer = 0;
+    }
+
+    // --- Bouncy Rubber Things & Thread Spools (Photo 1) ---
+    // Tile 21 is the authentic Red Rubber Band stretched between spools (PACKRAT.EXE 0x1a78)
+    // Tile 17 is the Thread Spool standing upright (PACKRAT.EXE 0x366 & 0x3aa3)
     const bouncePts = [
-      { x: player.x + player.w / 2, y: player.y + player.h },     // feet
+      { x: player.x + player.w / 2, y: player.y + player.h },     // feet center
       { x: player.x + 2, y: player.y + player.h },                // left foot
       { x: player.x + player.w - 2, y: player.y + player.h },     // right foot
       { x: player.x + player.w / 2, y: player.y + player.h / 2 }  // center
     ];
 
-    let onBouncy = false;
+    let bounceTile = 0;
     for (const pt of bouncePts) {
       const btx = Math.floor(pt.x / TILE_SIZE);
       const bty = Math.floor(pt.y / TILE_SIZE);
-      if (getTileAt(btx, bty) === 17) {
-        onBouncy = true;
+      const t = getTileAt(btx, bty);
+      if (t === 21 || t === 17) {
+        bounceTile = t;
         break;
       }
     }
 
-    if (onBouncy) {
-      const bouncePower = keys.jump ? -8.8 : -7.8;
+    if (bounceTile !== 0 && player.vy >= -1.0) {
+      let bouncePower = (bounceTile === 21)
+        ? (keys.jump ? -9.2 : Math.min(-6.8, (4 - Math.max(player.vy, 2.0)) * 0.85))
+        : (keys.jump ? -8.8 : -7.8);
       player.vy = bouncePower;
       player.onGround = false;
       player.jumping = true;
       sound.play(0); // Jump/spring sound
-      addSparkles(player.x + player.w / 2, player.y + player.h, '#00e5ff', 6);
-      addSparkles(player.x + player.w / 2, player.y + player.h, '#ffd028', 4);
+      const pCol = (bounceTile === 21) ? '#ff2a7a' : '#ffd028';
+      addSparkles(player.x + player.w / 2, player.y + player.h, pCol, 8);
+      addSparkles(player.x + player.w / 2, player.y + player.h, '#ffffff', 4);
     }
 
     // --- Horizontal Collision ---
@@ -999,7 +1077,7 @@
 
     if (player.vx > 0) {
       for (let ty = topTile; ty <= bottomTile; ty++) {
-        if (isTileSolid(getTileAt(rightTile, ty))) {
+        if (isTileWallSolid(getTileAt(rightTile, ty))) {
           player.x = rightTile * TILE_SIZE - player.w - 0.01;
           player.vx = 0;
           break;
@@ -1007,7 +1085,7 @@
       }
     } else if (player.vx < 0) {
       for (let ty = topTile; ty <= bottomTile; ty++) {
-        if (isTileSolid(getTileAt(leftTile, ty))) {
+        if (isTileWallSolid(getTileAt(leftTile, ty))) {
           player.x = (leftTile + 1) * TILE_SIZE + 0.01;
           player.vx = 0;
           break;
@@ -1019,24 +1097,48 @@
     player.y += player.vy;
     const newTopTile = Math.floor(player.y / TILE_SIZE);
     const newBottomTile = Math.floor((player.y + player.h) / TILE_SIZE);
-    const curLeftTile = Math.floor(player.x / TILE_SIZE);
-    const curRightTile = Math.floor((player.x + player.w) / TILE_SIZE);
+    const curLeftTile = Math.floor((player.x + 1) / TILE_SIZE);
+    const curRightTile = Math.floor((player.x + player.w - 1) / TILE_SIZE);
 
     player.onGround = false;
 
     if (player.vy > 0) {
       for (let tx = curLeftTile; tx <= curRightTile; tx++) {
-        if (isTileSolid(getTileAt(tx, newBottomTile))) {
-          player.y = newBottomTile * TILE_SIZE - player.h;
-          player.vy = 0;
-          player.onGround = true;
-          player.jumping = false;
-          break;
+        const tid = getTileAt(tx, newBottomTile);
+        if (isTileFloorSolid(tid)) {
+          if (tid === 21) {
+            // Authentic rubber band trampoline bounce from PACKRAT.EXE (0x1a78: vy = (4 - vy) * 0.8)
+            const incoming = Math.max(player.vy, 3.2);
+            const bounceImpulse = keys.jump ? -9.2 : Math.min(-6.8, (4 - incoming) * 0.85);
+            player.vy = bounceImpulse;
+            player.onGround = false;
+            player.jumping = true;
+            sound.play(0); // Jump/spring sound
+            addSparkles(player.x + player.w / 2, newBottomTile * TILE_SIZE, '#ff2a7a', 8);
+            addSparkles(player.x + player.w / 2, newBottomTile * TILE_SIZE, '#ffffff', 6);
+            break;
+          } else if (tid === 17) {
+            // Thread spool bounce
+            const bounceImpulse = keys.jump ? -8.8 : -7.5;
+            player.vy = bounceImpulse;
+            player.onGround = false;
+            player.jumping = true;
+            sound.play(0);
+            addSparkles(player.x + player.w / 2, newBottomTile * TILE_SIZE, '#ffd028', 8);
+            break;
+          } else {
+            // Solid floor landing
+            player.y = newBottomTile * TILE_SIZE - player.h;
+            player.vy = 0;
+            player.onGround = true;
+            player.jumping = false;
+            break;
+          }
         }
       }
     } else if (player.vy < 0) {
       for (let tx = curLeftTile; tx <= curRightTile; tx++) {
-        if (isTileSolid(getTileAt(tx, newTopTile))) {
+        if (isTileCeilingSolid(getTileAt(tx, newTopTile))) {
           player.y = (newTopTile + 1) * TILE_SIZE;
           player.vy = 0;
           break;
@@ -1044,9 +1146,13 @@
       }
     }
 
-    // --- Out of Bounds / Bottom Screen Death ---
-    if (player.y > MAP_H * TILE_SIZE + 32) {
-      killPlayer();
+    // --- Out of Bounds / Pit Fall Death (Photo 2) ---
+    if (player.y + player.h >= MAP_H * TILE_SIZE) {
+      killPlayer(4, true); // Instant pit death with sad jingle! (force = true ignores invulnerability)
+      return;
+    }
+    if (player.y > camera.y + VIRTUAL_H + 20 && player.vy > 0) {
+      killPlayer(4, true); // Fell off bottom of visible screen
       return;
     }
 
@@ -1054,6 +1160,7 @@
     const checkTiles = [
       { tx: Math.floor((player.x + 2) / TILE_SIZE), ty: Math.floor((player.y + 4) / TILE_SIZE) },
       { tx: Math.floor((player.x + player.w - 2) / TILE_SIZE), ty: Math.floor((player.y + 4) / TILE_SIZE) },
+      { tx: Math.floor((player.x + player.w / 2) / TILE_SIZE), ty: Math.floor((player.y + player.h / 2) / TILE_SIZE) },
       { tx: Math.floor((player.x + 2) / TILE_SIZE), ty: Math.floor((player.y + player.h - 2) / TILE_SIZE) },
       { tx: Math.floor((player.x + player.w - 2) / TILE_SIZE), ty: Math.floor((player.y + player.h - 2) / TILE_SIZE) }
     ];
@@ -1087,7 +1194,16 @@
 
       // Hazards
       if (isTileHazard(tid)) {
-        killPlayer();
+        if (tid === 2) {
+          killPlayer(8); // Mousetrap snap!
+        } else if (tid >= 11 && tid <= 14) {
+          killPlayer(10); // Water splash!
+        } else if (tid === 18 || tid === 19) {
+          if (tid === 18) setTileAt(pt.tx, pt.ty, 19); // Sparks into shorted wire!
+          killPlayer(7); // Electric zap!
+        } else {
+          killPlayer(4);
+        }
         return;
       }
     }
@@ -1103,7 +1219,7 @@
         player.y < enemy.y + enemy.h &&
         player.y + player.h > enemy.y
       ) {
-        killPlayer();
+        killPlayer(9); // Enemy rat bite sound!
         return;
       }
     }
@@ -1282,7 +1398,9 @@
 
         if (tid === 1) ctx.fillStyle = '#8b2020'; // Brick
         else if (tid === 16) ctx.fillStyle = '#00e5ff'; // Ice Cube
-        else if (tid === 17) ctx.fillStyle = '#ffd028'; // Bouncy Rubber Tube
+        else if (tid === 17) ctx.fillStyle = '#ffd028'; // Thread Spool
+        else if (tid === 20 || tid === 22) ctx.fillStyle = '#64748b'; // Pulley / Spool
+        else if (tid === 21) ctx.fillStyle = '#ff2a7a'; // Red Rubber Band
         else if (tid >= 31 && tid <= 35) ctx.fillStyle = '#ffd028'; // Baubles
         else if (tid === 15) ctx.fillStyle = '#39ff14'; // Mouse Hole
         else if (tid >= 11 && tid <= 14) ctx.fillStyle = '#00a0dc'; // Water

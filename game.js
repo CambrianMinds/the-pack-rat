@@ -758,9 +758,6 @@
       if (footTile === 21) {
         player.vy = -9.2; // Rubber band trampoline super jump!
         addSparkles(player.x + player.w / 2, player.y + player.h, '#ff2a7a', 10);
-      } else if (footTile === 17) {
-        player.vy = -8.5; // Thread spool bounce jump!
-        addSparkles(player.x + player.w / 2, player.y + player.h, '#ffd028', 8);
       } else {
         player.vy = -6.4; // Normal jump
         addSparkles(player.x + player.w / 2, player.y + player.h, '#ffffff', 4);
@@ -1034,39 +1031,6 @@
       player.jumpTimer = 0;
     }
 
-    // --- Bouncy Rubber Things & Thread Spools (Photo 1) ---
-    // Tile 21 is the authentic Red Rubber Band stretched between spools (PACKRAT.EXE 0x1a78)
-    // Tile 17 is the Thread Spool standing upright (PACKRAT.EXE 0x366 & 0x3aa3)
-    const bouncePts = [
-      { x: player.x + player.w / 2, y: player.y + player.h },     // feet center
-      { x: player.x + 2, y: player.y + player.h },                // left foot
-      { x: player.x + player.w - 2, y: player.y + player.h },     // right foot
-      { x: player.x + player.w / 2, y: player.y + player.h / 2 }  // center
-    ];
-
-    let bounceTile = 0;
-    for (const pt of bouncePts) {
-      const btx = Math.floor(pt.x / TILE_SIZE);
-      const bty = Math.floor(pt.y / TILE_SIZE);
-      const t = getTileAt(btx, bty);
-      if (t === 21 || t === 17) {
-        bounceTile = t;
-        break;
-      }
-    }
-
-    if (bounceTile !== 0 && player.vy >= -1.0) {
-      let bouncePower = (bounceTile === 21)
-        ? (keys.jump ? -9.2 : Math.min(-6.8, (4 - Math.max(player.vy, 2.0)) * 0.85))
-        : (keys.jump ? -8.8 : -7.8);
-      player.vy = bouncePower;
-      player.onGround = false;
-      player.jumping = true;
-      sound.play(0); // Jump/spring sound
-      const pCol = (bounceTile === 21) ? '#ff2a7a' : '#ffd028';
-      addSparkles(player.x + player.w / 2, player.y + player.h, pCol, 8);
-      addSparkles(player.x + player.w / 2, player.y + player.h, '#ffffff', 4);
-    }
 
     // --- Horizontal Collision ---
     player.x += player.vx;
@@ -1110,6 +1074,7 @@
             // Authentic rubber band trampoline bounce from PACKRAT.EXE (0x1a78: vy = (4 - vy) * 0.8)
             const incoming = Math.max(player.vy, 3.2);
             const bounceImpulse = keys.jump ? -9.2 : Math.min(-6.8, (4 - incoming) * 0.85);
+            player.y = newBottomTile * TILE_SIZE - player.h;
             player.vy = bounceImpulse;
             player.onGround = false;
             player.jumping = true;
@@ -1117,17 +1082,8 @@
             addSparkles(player.x + player.w / 2, newBottomTile * TILE_SIZE, '#ff2a7a', 8);
             addSparkles(player.x + player.w / 2, newBottomTile * TILE_SIZE, '#ffffff', 6);
             break;
-          } else if (tid === 17) {
-            // Thread spool bounce
-            const bounceImpulse = keys.jump ? -8.8 : -7.5;
-            player.vy = bounceImpulse;
-            player.onGround = false;
-            player.jumping = true;
-            sound.play(0);
-            addSparkles(player.x + player.w / 2, newBottomTile * TILE_SIZE, '#ffd028', 8);
-            break;
           } else {
-            // Solid floor landing
+            // Solid floor landing (Bricks 1/10, Ice 16, Thread Spool 17, Pulleys 20/22, Crates 3..9)
             player.y = newBottomTile * TILE_SIZE - player.h;
             player.vy = 0;
             player.onGround = true;

@@ -202,7 +202,7 @@
 
             // Place rat falling onto the rubber band
             PACKRAT.player.x = 10 * 16 + 1;
-            PACKRAT.player.y = 39 * 16 + 10;
+            PACKRAT.player.y = 40 * 16 - PACKRAT.player.h - 2;
             PACKRAT.player.vy = 4.0;
 
             PACKRAT.step(1);
@@ -225,7 +225,7 @@
             PACKRAT.setTileAt(12, 39, 0);
 
             PACKRAT.player.x = 12 * 16 + 1;
-            PACKRAT.player.y = 39 * 16 + 10;
+            PACKRAT.player.y = 40 * 16 - PACKRAT.player.h - 2;
             PACKRAT.player.vy = 4.0;
 
             PACKRAT.step(1);
@@ -233,6 +233,31 @@
             // Super bounce formula gives -9.2
             assert.lessThan(PACKRAT.player.vy, -8.5, 'Super trampoline bounce must propel rat with vy <= -8.5');
             PACKRAT.keys.jump = false;
+          }
+        },
+        {
+          name: 'Walking on brick floor next to/under spools does not jump or bounce prematurely',
+          fn(PACKRAT, assert) {
+            PACKRAT.loadLevel(0);
+            PACKRAT.state = PACKRAT.GAME_STATE.PLAYING;
+
+            // In Level 0, floor is at y=53, spool and rubber bands at y=51, x=59..62
+            PACKRAT.player.x = 56 * 16;
+            PACKRAT.player.y = 53 * 16 - PACKRAT.player.h;
+            PACKRAT.player.onGround = true;
+            PACKRAT.player.vx = 0;
+            P = PACKRAT;
+            PACKRAT.keys.right = true;
+
+            for (let i = 0; i < 40; i++) {
+              PACKRAT.step(1);
+            }
+            PACKRAT.keys.right = false;
+
+            // Rat should have walked all the way near the spool without jumping
+            assert.greaterThan(PACKRAT.player.x, 59 * 16, 'Rat should walk past x=59');
+            assert.equal(PACKRAT.player.onGround, true, 'Rat must remain on the ground while walking');
+            assert.equal(PACKRAT.player.jumping, false, 'Rat must not be forced to jump');
           }
         },
         {
@@ -260,10 +285,10 @@
     {
       id: 'suite-thread-spool',
       name: 'Thread Spool Mechanics (Bug 2 & PACKRAT.EXE 0x3a18 / 0x366)',
-      description: 'Verifies Tile 17 (Thread Spool) roll on 1 push hit, bounce platform, and wall stop',
+      description: 'Verifies Tile 17 (Thread Spool) roll on 1 push hit, standable platform, and wall stop',
       tests: [
         {
-          name: 'Thread spool is classified as standable bounce floor and pushable block',
+          name: 'Thread spool is classified as standable floor and pushable block',
           fn(PACKRAT, assert) {
             // Tile 17: Thread Spool
             assert.ok(PACKRAT.isTileFloorSolid(17), 'Tile 17 must be standable floor');
@@ -273,7 +298,7 @@
           }
         },
         {
-          name: 'Landing on thread spool triggers springboard bounce',
+          name: 'Landing on thread spool acts as a solid standable platform (Table DS:0x366)',
           fn(PACKRAT, assert) {
             PACKRAT.loadLevel(0);
             PACKRAT.state = PACKRAT.GAME_STATE.PLAYING;
@@ -282,12 +307,13 @@
             PACKRAT.setTileAt(20, 44, 0);  // Air
 
             PACKRAT.player.x = 20 * 16 + 1;
-            PACKRAT.player.y = 44 * 16 + 10;
+            PACKRAT.player.y = 45 * 16 - PACKRAT.player.h - 2;
             PACKRAT.player.vy = 3.5;
 
             PACKRAT.step(1);
 
-            assert.lessThan(PACKRAT.player.vy, -7.0, 'Spool must launch rat upward with vy < -7.0');
+            assert.equal(PACKRAT.player.onGround, true, 'Spool should act as a solid standable platform');
+            assert.equal(PACKRAT.player.vy, 0, 'Vertical velocity should settle to 0 on landing');
           }
         },
         {

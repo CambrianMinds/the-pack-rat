@@ -19,7 +19,10 @@
 
   // Pre-rendered sprite and tile caches
   const tileBitmaps = {};
-  const ratBitmaps = { right: [], left: [] };
+  const ratBitmaps = {
+    right: { idle: null, jump: null, walk: [] },
+    left: { idle: null, jump: null, walk: [] }
+  };
   const enemyBitmaps = { left: [], right: [] };
 
   // --- Pre-render Assets ---
@@ -67,21 +70,40 @@
       return fc;
     }
 
-    // Pre-render tiles
+    // Pre-render tiles (authentic 16x16 map tiles are 1..35)
     for (const [idStr, tile] of Object.entries(assets.tiles)) {
       const id = parseInt(idStr, 10);
-      tileBitmaps[id] = createTileCanvas(tile.w, tile.h, tile.pixels);
+      if (id <= 35) {
+        tileBitmaps[id] = createTileCanvas(tile.w, tile.h, tile.pixels);
+      }
     }
 
-    // Pre-render rat animation frames
+    // Pre-render raw rat animation frames
+    // In PACKRAT.EXE:
+    // Frames 0..6 are left-facing (0=idle, 1..6=walk)
+    // Frames 7..14 are right-facing (9=idle, 7,8,10..14=walk)
+    // Frame 15 is left-facing jump, Frame 16 is right-facing jump
+    const rawRat = [];
     for (let i = 0; i < assets.ratFrames.length; i++) {
       const rf = assets.ratFrames[i];
-      const rCanvas = createTileCanvas(rf.w, rf.h, rf.pixels);
-      ratBitmaps.right.push(rCanvas);
-      ratBitmaps.left.push(createFlippedCanvas(rCanvas));
+      rawRat.push(createTileCanvas(rf.w, rf.h, rf.pixels));
     }
 
-    // Pre-render enemy rat animation frames
+    // Right-facing set
+    ratBitmaps.right = {
+      idle: rawRat[9] || (rawRat[0] ? createFlippedCanvas(rawRat[0]) : null),
+      jump: rawRat[16] || (rawRat[15] ? createFlippedCanvas(rawRat[15]) : null),
+      walk: [rawRat[9], rawRat[7], rawRat[8], rawRat[10], rawRat[11], rawRat[12], rawRat[13], rawRat[14]].filter(Boolean)
+    };
+
+    // Left-facing set
+    ratBitmaps.left = {
+      idle: rawRat[0] || (rawRat[9] ? createFlippedCanvas(rawRat[9]) : null),
+      jump: rawRat[15] || (rawRat[16] ? createFlippedCanvas(rawRat[16]) : null),
+      walk: [rawRat[0], rawRat[1], rawRat[2], rawRat[3], rawRat[4], rawRat[5], rawRat[6]].filter(Boolean)
+    };
+
+    // Pre-render enemy rat animation frames (naturally left-facing)
     for (let i = 0; i < assets.enemyFrames.length; i++) {
       const ef = assets.enemyFrames[i];
       const eCanvas = createTileCanvas(ef.w, ef.h, ef.pixels);
@@ -228,29 +250,55 @@
     }
 
     update() {
-      // Gravity
-      const tileBelow = getTileAt(Math.floor((this.x + 8) / TILE_SIZE), Math.floor((this.y + 16) / TILE_SIZE));
+      // Horizontal sliding (ice cubes or crates)
+      if (Math.abs(this.vx) > 0.05) {
+        this.x += this.vx;
+        this.vx *= 0.90;
+        const checkTx = Math.floor((this.vx > 0 ? this.x + 15 : this.x) / TILE_SIZE);
+        const checkTy = Math.floor((this.y + 8) / TILE_SIZE);
+        if (isTileSolid(getTileAt(checkTx, checkTy))) {
+          this.vx = 0;
+          this.x = Math.round(this.x / TILE_SIZE) * TILE_SIZE;
+        }
+      } else {
+        this.vx = 0;
+      }
+
+      // Gravity check
+      const centerTx = Math.floor((this.x + 8) / TILE_SIZE);
+      const feetY = Math.floor((this.y + 16) / TILE_SIZE);
+      const tileBelow = getTileAt(centerTx, feetY);
+
       if (!isTileSolid(tileBelow)) {
         this.falling = true;
         this.vy += 0.35;
-        if (this.vy > 6) this.vy = 6;
+        if (this.vy > 6.0) this.vy = 6.0;
         this.y += this.vy;
 
         // Snap to grid when landing
         const landTileY = Math.floor((this.y + 16) / TILE_SIZE);
-        if (isTileSolid(getTileAt(Math.floor((this.x + 8) / TILE_SIZE), landTileY))) {
+        if (isTileSolid(getTileAt(centerTx, landTileY))) {
           this.y = (landTileY - 1) * TILE_SIZE;
           this.vy = 0;
+          this.vx = 0;
           this.falling = false;
-          this.tx = Math.floor(this.x / TILE_SIZE);
-          this.ty = Math.floor(this.y / TILE_SIZE);
+          this.tx = centerTx;
+          this.ty = landTileY - 1;
+          this.x = this.tx * TILE_SIZE;
           setTileAt(this.tx, this.ty, this.tileId);
+          sound.play(5); // Bump sound
         }
+      } else if (this.vx === 0 && !this.falling) {
+        this.tx = centerTx;
+        this.ty = Math.floor(this.y / TILE_SIZE);
+        this.x = this.tx * TILE_SIZE;
+        this.y = this.ty * TILE_SIZE;
+        setTileAt(this.tx, this.ty, this.tileId);
       }
     }
 
     draw(camX, camY) {
-      const sprite = tileBitmaps[this.tileId];
+      const sprite = tileBitmaps[this.tileId % 36];
       if (sprite) {
         ctx.drawImage(sprite, Math.floor(this.x - camX), Math.floor(this.y - camY));
       }
@@ -567,31 +615,38 @@
   }
 
   function isTileSolid(id) {
-    // Tile 1 = Brick, Tile 16 = Stone Block
-    // Tile 3..9 = Crates / Movable blocks
-    // Note: Tile 10 is Illusionary brick (NOT solid!)
+    // Tile IDs >= 36 are illusionary pass-through tiles
+    if (id >= 36) return false;
+    // Tile 10 is also illusionary brick (secret wall)
+    if (id === 10) return false;
+    // Tile 1 = Brick, Tile 16 = Ice Cube / Stone
     if (id === 1 || id === 16) return true;
+    // Tile 3..9 = Crates / Movable blocks
     if (id >= 3 && id <= 9) return true;
     return false;
   }
 
   function isTileMovable(id) {
-    // Crates / numbered blocks
-    return id >= 3 && id <= 9;
+    if (id >= 36) return false;
+    // Crates (3..9) and Ice Cubes (16)
+    return (id >= 3 && id <= 9) || id === 16;
   }
 
   function isTileHazard(id) {
+    // Illusionary tiles (>= 36, such as decoy trap 38) are never lethal
+    if (id >= 36) return false;
     // Tile 2: Mousetrap
     // Tile 11..14: Water
-    // Tile 17: Spike
     // Tile 18..19: Electric sparks
-    if (id === 2 || (id >= 11 && id <= 14) || id === 17 || id === 18 || id === 19) {
+    // Note: Tile 17 is the bouncy rubber column, NOT a hazard!
+    if (id === 2 || (id >= 11 && id <= 14) || id === 18 || id === 19) {
       return true;
     }
     return false;
   }
 
   function isTileBauble(id) {
+    if (id >= 36) return false;
     return id >= 31 && id <= 35;
   }
 
@@ -620,18 +675,13 @@
     enemies = [];
     particles = [];
 
-    // Scan map for crates and potential enemy patrol zones
+    // Scan map for potential enemy patrol zones
     for (let ty = 0; ty < MAP_H; ty++) {
       let consecutiveFloor = 0;
       let floorStartX = 0;
 
       for (let tx = 0; tx < MAP_W; tx++) {
         const tid = getTileAt(tx, ty);
-
-        // Movable crates
-        if (isTileMovable(tid)) {
-          movableBlocks.push(new MovableBlock(tx, ty, tid));
-        }
 
         // Enemy platform patrol detection
         if (isTileSolid(tid)) {
@@ -727,27 +777,47 @@
     }, 1800);
   }
 
-  // Dislodge block beneath player
+  // Dislodge block beneath player or in front of feet when crouching (Crates 3..9 and Ice Cubes 16)
   function dislodgeBlockBelow() {
-    const tx = Math.floor((player.x + player.w / 2) / TILE_SIZE);
-    const ty = Math.floor((player.y + player.h + 2) / TILE_SIZE);
-    const tid = getTileAt(tx, ty);
+    const feetY = Math.floor((player.y + player.h + 2) / TILE_SIZE);
+    const txMid = Math.floor((player.x + player.w / 2) / TILE_SIZE);
+    const txAhead = Math.floor((player.x + (player.facing > 0 ? player.w + 6 : -6)) / TILE_SIZE);
+    const txLeft = Math.floor((player.x + 2) / TILE_SIZE);
+    const txRight = Math.floor((player.x + player.w - 2) / TILE_SIZE);
 
-    // If standing on a movable / dislodgeable crate (tiles 3..9)
-    if (isTileMovable(tid)) {
-      setTileAt(tx, ty, 0); // Dislodge! Remove from grid
+    let targetTx = -1;
+    let tid = 0;
+
+    for (const testTx of [txMid, txAhead, txRight, txLeft]) {
+      const t = getTileAt(testTx, feetY);
+      if (isTileMovable(t)) {
+        targetTx = testTx;
+        tid = t;
+        break;
+      }
+    }
+
+    if (targetTx >= 0 && isTileMovable(tid)) {
+      setTileAt(targetTx, feetY, 0); // Dislodge! Remove from grid
       sound.play(5); // Bump sound
-      addSparkles(tx * TILE_SIZE + 8, ty * TILE_SIZE + 8, '#aeae00', 6);
-      movableBlocks.push(new MovableBlock(tx, ty, tid));
+      const pColor = (tid === 16) ? '#00e5ff' : '#ffd028';
+      addSparkles(targetTx * TILE_SIZE + 8, feetY * TILE_SIZE + 8, pColor, 10);
+      movableBlocks.push(new MovableBlock(targetTx, feetY, tid));
     }
   }
 
   // Push movable block in front of player
   function tryPushBlock(dir) {
-    const checkX = player.x + (dir > 0 ? player.w + 2 : -2);
+    const checkX = player.x + (dir > 0 ? player.w + 4 : -4);
     const tx = Math.floor(checkX / TILE_SIZE);
-    const ty = Math.floor((player.y + player.h / 2) / TILE_SIZE);
-    const tid = getTileAt(tx, ty);
+
+    // Check chest level first, then foot level
+    let ty = Math.floor((player.y + player.h / 2) / TILE_SIZE);
+    let tid = getTileAt(tx, ty);
+    if (!isTileMovable(tid)) {
+      ty = Math.floor((player.y + player.h - 4) / TILE_SIZE);
+      tid = getTileAt(tx, ty);
+    }
 
     if (isTileMovable(tid)) {
       const destTx = tx + dir;
@@ -757,6 +827,11 @@
         setTileAt(tx, ty, 0);
         sound.play(7); // Push block sound
         const blk = new MovableBlock(destTx, ty, tid);
+        if (tid === 16) {
+          // Ice cube slides horizontally!
+          blk.vx = dir * 2.2;
+          addSparkles(destTx * TILE_SIZE + 8, ty * TILE_SIZE + 8, '#00e5ff', 6);
+        }
         movableBlocks.push(blk);
         player.pushing = true;
       }
@@ -833,9 +908,9 @@
     player.lookingUp = keys.up && player.onGround && Math.abs(player.vx) < 0.2;
     player.lookingDown = keys.down && player.onGround && Math.abs(player.vx) < 0.2;
 
-    if (player.lookingDown) {
+    if (player.lookingDown || (keys.down && player.onGround)) {
       player.dislodgeTimer++;
-      if (player.dislodgeTimer > 25) {
+      if (player.dislodgeTimer >= 15 || (keys.push && player.dislodgeTimer >= 2)) {
         player.dislodgeTimer = 0;
         dislodgeBlockBelow();
       }
@@ -843,10 +918,16 @@
       player.dislodgeTimer = 0;
     }
 
+    // Slippery physics when on Ice Cubes (Tile 16)
+    const feetCheckY = Math.floor((player.y + player.h + 1) / TILE_SIZE);
+    const feetCheckX1 = Math.floor((player.x + 2) / TILE_SIZE);
+    const feetCheckX2 = Math.floor((player.x + player.w - 2) / TILE_SIZE);
+    const onIce = player.onGround && (getTileAt(feetCheckX1, feetCheckY) === 16 || getTileAt(feetCheckX2, feetCheckY) === 16);
+
     // Horizontal Acceleration
-    const ACCEL = 0.35;
-    const MAX_SPEED = 2.4;
-    const FRICTION = 0.82;
+    const ACCEL = onIce ? 0.18 : 0.35;
+    const MAX_SPEED = onIce ? 2.8 : 2.4;
+    const FRICTION = onIce ? 0.96 : 0.82;
 
     if (keys.left) {
       player.vx -= ACCEL;
@@ -861,6 +942,17 @@
       if (Math.abs(player.vx) < 0.05) player.vx = 0;
     }
 
+    // Auto-push against blocks if walking into them
+    if (Math.abs(player.vx) < 0.15 && (keys.left || keys.right)) {
+      player.pushCounter = (player.pushCounter || 0) + 1;
+      if (player.pushCounter > 10) {
+        player.pushCounter = 0;
+        tryPushBlock(keys.right ? 1 : -1);
+      }
+    } else {
+      player.pushCounter = 0;
+    }
+
     // Clamp horizontal speed
     player.vx = Math.max(-MAX_SPEED, Math.min(MAX_SPEED, player.vx));
 
@@ -869,6 +961,34 @@
     const TERMINAL_VEL = 7.0;
     player.vy += GRAVITY;
     if (player.vy > TERMINAL_VEL) player.vy = TERMINAL_VEL;
+
+    // --- Bouncy Rubber Things (Tile 17) ---
+    const bouncePts = [
+      { x: player.x + player.w / 2, y: player.y + player.h },     // feet
+      { x: player.x + 2, y: player.y + player.h },                // left foot
+      { x: player.x + player.w - 2, y: player.y + player.h },     // right foot
+      { x: player.x + player.w / 2, y: player.y + player.h / 2 }  // center
+    ];
+
+    let onBouncy = false;
+    for (const pt of bouncePts) {
+      const btx = Math.floor(pt.x / TILE_SIZE);
+      const bty = Math.floor(pt.y / TILE_SIZE);
+      if (getTileAt(btx, bty) === 17) {
+        onBouncy = true;
+        break;
+      }
+    }
+
+    if (onBouncy) {
+      const bouncePower = keys.jump ? -8.8 : -7.8;
+      player.vy = bouncePower;
+      player.onGround = false;
+      player.jumping = true;
+      sound.play(0); // Jump/spring sound
+      addSparkles(player.x + player.w / 2, player.y + player.h, '#00e5ff', 6);
+      addSparkles(player.x + player.w / 2, player.y + player.h, '#ffd028', 4);
+    }
 
     // --- Horizontal Collision ---
     player.x += player.vx;
@@ -992,7 +1112,7 @@
     for (let i = movableBlocks.length - 1; i >= 0; i--) {
       const mb = movableBlocks[i];
       mb.update();
-      if (!mb.falling) {
+      if (!mb.falling && mb.vx === 0) {
         // Remove from dynamic list once rested back into grid
         movableBlocks.splice(i, 1);
       }
@@ -1014,7 +1134,7 @@
     if (Math.abs(player.vx) > 0.2 && player.onGround) {
       if (player.animTimer > 4) {
         player.animTimer = 0;
-        player.animFrame = (player.animFrame + 1) % 6; // 6-frame run cycle
+        player.animFrame = (player.animFrame + 1) % 8; // cycle run frames
       }
     } else {
       player.animFrame = 0; // idle
@@ -1051,10 +1171,13 @@
     // Electric spark animation frame (cycles 18..19 every 8 frames)
     const sparkAnimFrame = 18 + (Math.floor(gameTicks / 8) % 2);
 
-    // 1. Draw Map Tiles
+    // 1. Draw Map Tiles (modulo 36 prevents illusionary tiles showing as rat sprites!)
     for (let ty = startRow; ty <= endRow; ty++) {
       for (let tx = startCol; tx <= endCol; tx++) {
-        let tid = getTileAt(tx, ty);
+        const rawTid = getTileAt(tx, ty);
+        if (rawTid === 0) continue;
+
+        let tid = rawTid % 36;
         if (tid === 0) continue;
 
         // Animated water
@@ -1113,28 +1236,31 @@
       return;
     }
 
-    const sprites = player.facing > 0 ? ratBitmaps.right : ratBitmaps.left;
-    if (sprites.length === 0) return;
+    const set = player.facing > 0 ? ratBitmaps.right : ratBitmaps.left;
+    if (!set || !set.idle) return;
 
-    let frameIdx = 0;
+    let sprite = set.idle;
+    let offsetY = 0;
+
     if (player.jumping || !player.onGround) {
-      frameIdx = 7; // jump frame
-    } else if (player.lookingUp) {
-      frameIdx = 1; // look up frame
+      sprite = set.jump || set.idle;
     } else if (player.lookingDown) {
-      frameIdx = 3; // duck frame
+      sprite = set.idle;
+      offsetY = 3; // duck / dislodge crouch
+    } else if (player.lookingUp) {
+      sprite = set.idle;
+      offsetY = -2; // look up
     } else if (Math.abs(player.vx) > 0.2) {
-      // Running animation frames 7..12
-      frameIdx = (7 + player.animFrame) % sprites.length;
+      const walkIdx = player.animFrame % set.walk.length;
+      sprite = set.walk[walkIdx] || set.idle;
     } else {
-      frameIdx = 0; // idle
+      sprite = set.idle;
     }
 
-    const sprite = sprites[frameIdx] || sprites[0];
     if (sprite) {
-      // Draw sprite offset centered over bounding box
+      // Draw sprite centered over bounding box
       const drawX = Math.floor(player.x - camX - (sprite.width - player.w) / 2);
-      const drawY = Math.floor(player.y - camY - (sprite.height - player.h));
+      const drawY = Math.floor(player.y - camY - (sprite.height - player.h) + offsetY);
       ctx.drawImage(sprite, drawX, drawY);
     }
   }
@@ -1149,10 +1275,14 @@
 
     for (let ty = 0; ty < MAP_H; ty++) {
       for (let tx = 0; tx < MAP_W; tx++) {
-        const tid = getTileAt(tx, ty);
+        const rawTid = getTileAt(tx, ty);
+        if (rawTid === 0) continue;
+        const tid = rawTid % 36;
         if (tid === 0) continue;
 
         if (tid === 1) ctx.fillStyle = '#8b2020'; // Brick
+        else if (tid === 16) ctx.fillStyle = '#00e5ff'; // Ice Cube
+        else if (tid === 17) ctx.fillStyle = '#ffd028'; // Bouncy Rubber Tube
         else if (tid >= 31 && tid <= 35) ctx.fillStyle = '#ffd028'; // Baubles
         else if (tid === 15) ctx.fillStyle = '#39ff14'; // Mouse Hole
         else if (tid >= 11 && tid <= 14) ctx.fillStyle = '#00a0dc'; // Water
@@ -1218,7 +1348,8 @@
     ctx.fillText('(C) 1992 BY STEVE BLANDING', VIRTUAL_W / 2, 88);
 
     // Animated Pack Rat sprite showcase
-    const showcaseSprite = ratBitmaps.right[Math.floor(gameTicks / 8) % ratBitmaps.right.length];
+    const showcaseFrames = (ratBitmaps.right && ratBitmaps.right.walk && ratBitmaps.right.walk.length > 0) ? ratBitmaps.right.walk : [ratBitmaps.right?.idle];
+    const showcaseSprite = showcaseFrames[Math.floor(gameTicks / 8) % showcaseFrames.length];
     if (showcaseSprite) {
       ctx.drawImage(showcaseSprite, VIRTUAL_W / 2 - 10, 102);
     }
@@ -1387,6 +1518,7 @@
 
     assets.levels.forEach((lvl, i) => {
       const card = document.createElement('div');
+      card.id = `lvlBtn_${i}`;
       card.className = `level-card ${i === currentLevelIdx ? 'current' : ''}`;
       card.innerHTML = `
         <span class="level-num">LVL ${i}</span>
@@ -1613,7 +1745,15 @@
   const scores = getHighScores();
   if (scores.length > 0) highScore = scores[0].score;
   loadLevel(0);
-  currentState = GAME_STATE.TITLE;
+  // Expose engine API for level select and debugging
+  window.PACKRAT = {
+    startGame,
+    loadLevel,
+    player,
+    getTileAt,
+    setTileAt,
+    get movableBlocks() { return movableBlocks; }
+  };
 
   requestAnimationFrame(gameLoop);
 })();

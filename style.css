@@ -88,22 +88,45 @@ body::before {
 
 .brand-logo {
   font-family: var(--font-retro);
-  font-size: 16px;
+  font-size: 15px;
   color: var(--neon-gold);
   text-shadow: 0 0 12px rgba(255, 208, 40, 0.6);
   letter-spacing: -0.5px;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
-.brand-badge {
-  font-size: 10px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-  padding: 3px 8px;
-  background: linear-gradient(135deg, rgba(0, 229, 255, 0.2), rgba(255, 42, 122, 0.2));
-  border: 1px solid rgba(0, 229, 255, 0.4);
-  border-radius: 20px;
+.header-credits {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 3px;
+  border-left: 2px solid rgba(0, 229, 255, 0.35);
+  padding-left: 14px;
+  margin-left: 4px;
+}
+
+.credit-prominent {
+  font-family: var(--font-retro);
+  font-size: 8.5px;
   color: var(--neon-cyan);
+  text-shadow: 0 0 10px rgba(0, 229, 255, 0.45);
+  letter-spacing: 0.6px;
+  white-space: nowrap;
+}
+
+.credit-sub {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: 0.4px;
+  white-space: nowrap;
+}
+
+@media (max-width: 960px) {
+  .header-credits {
+    display: none;
+  }
 }
 
 .header-controls {

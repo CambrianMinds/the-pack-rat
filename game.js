@@ -167,6 +167,104 @@
   let gameTicks = 0;
   let showHud = true;
 
+  // Intro Screen Memorial House Background & Foreground Tree Layer
+  const houseImg = (typeof Image !== 'undefined') ? new Image() : null;
+  let houseImgLoaded = false;
+  const treeOverlayImg = (typeof Image !== 'undefined') ? new Image() : null;
+  let treeOverlayLoaded = false;
+  let treeOverlayCanvas = null;
+
+  function buildTreeOverlay() {
+    if (!houseImg || typeof document === 'undefined') return;
+    try {
+      const oc = document.createElement('canvas');
+      oc.width = 1200;
+      oc.height = 896;
+      const octx = oc.getContext('2d');
+      if (!octx) return;
+
+      const tmp = document.createElement('canvas');
+      tmp.width = 1200;
+      tmp.height = 896;
+      const tctx = tmp.getContext('2d');
+      if (!tctx) return;
+      tctx.drawImage(houseImg, 0, 0);
+
+      // Foreground tree covering the sidewalk (canopy: x in 160..480, trunk: x in 305..355 down to roots)
+      const minX = 160, maxX = 480;
+      const minY = 120, maxY = 840;
+      const w = maxX - minX;
+      const h = maxY - minY;
+
+      const srcData = tctx.getImageData(minX, minY, w, h);
+      const outData = octx.createImageData(w, h);
+
+      for (let y = 0; y < h; y++) {
+        const absY = minY + y;
+        for (let x = 0; x < w; x++) {
+          const absX = minX + x;
+          const idx = (y * w + x) * 4;
+
+          // Below the canopy (y >= 630), restrict to trunk column
+          if (absY >= 630 && (absX < 305 || absX > 355)) {
+            outData.data[idx + 3] = 0;
+            continue;
+          }
+
+          const r = srcData.data[idx];
+          const g = srcData.data[idx + 1];
+          const b = srcData.data[idx + 2];
+
+          const isSky = (r > 170 && g > 190 && b > 200);
+          const isHouse = (r > 160 && g > 130 && b < 130 && r > b + 40);
+          const isSidewalk = (Math.abs(r - g) < 18 && Math.abs(g - b) < 18 && r > 115);
+          const isLawn = (Math.abs(r - 35) < 12 && Math.abs(g - 84) < 12 && Math.abs(b - 24) < 12);
+
+          let isTree = false;
+          if (absY >= 630) {
+            isTree = (!isSidewalk && !isLawn);
+          } else {
+            isTree = (!isSky && !isHouse && !isSidewalk);
+          }
+
+          if (isTree) {
+            outData.data[idx] = r;
+            outData.data[idx + 1] = g;
+            outData.data[idx + 2] = b;
+            outData.data[idx + 3] = 255;
+          } else {
+            outData.data[idx + 3] = 0;
+          }
+        }
+      }
+
+      octx.putImageData(outData, minX, minY);
+      treeOverlayCanvas = oc;
+    } catch (e) {
+      console.warn('Could not build tree overlay:', e);
+    }
+  }
+
+  if (houseImg) {
+    houseImg.onload = () => {
+      houseImgLoaded = true;
+      if (!treeOverlayLoaded) {
+        buildTreeOverlay();
+      }
+    };
+    houseImg.src = 'house.jpg';
+  }
+
+  if (treeOverlayImg) {
+    treeOverlayImg.onload = () => {
+      treeOverlayLoaded = true;
+      treeOverlayCanvas = treeOverlayImg;
+    };
+    treeOverlayImg.src = 'tree_overlay.png';
+  }
+  let titleRatX = 30;
+  let titleRatDir = 1;
+
   // Particle Effects (Coin pickups, landing dust, sparks)
   let particles = [];
 
@@ -311,6 +409,27 @@
     }
   }
 
+  // --- Unsupported Block Gravity (Authentic to PACKRAT.EXE 0x4182) ---
+  // When an underlying block is pushed or dislodged, any blocks stacked above it fall down instead of floating in air.
+  function dropStackedBlocksAbove(baseTx, baseTy) {
+    let checkTy = baseTy - 1;
+    while (checkTy >= 0) {
+      const tidAbove = getTileAt(baseTx, checkTy);
+      // Movable blocks: ice cubes (16), dislodgeable bricks (10), crates (3..9)
+      // Note: Thread spools (17) in climbing columns are anchor shafts and do not drop
+      if (tidAbove === 16 || tidAbove === 10 || (tidAbove >= 3 && tidAbove <= 9)) {
+        setTileAt(baseTx, checkTy, 0); // Remove from static grid
+        const blk = new MovableBlock(baseTx, checkTy, tidAbove);
+        blk.falling = true;
+        blk.vy = 0.8;
+        movableBlocks.push(blk);
+        checkTy--;
+      } else {
+        break;
+      }
+    }
+  }
+
   // --- Player (The Pack Rat) ---
   const player = {
     x: 48,
@@ -333,6 +452,8 @@
     jumpTimer: 0,
     invulnerableTimer: 0,
     dislodgeTimer: 0,
+    ignoreSpoolY: -1,
+    spoolDropCooldown: 0,
 
     reset(startX, startY) {
       this.x = startX * TILE_SIZE + 1;
@@ -350,6 +471,8 @@
       this.animFrame = 0;
       this.animTimer = 0;
       this.invulnerableTimer = 60; // 1 second immunity
+      this.ignoreSpoolY = -1;
+      this.spoolDropCooldown = 0;
     }
   };
 
@@ -677,6 +800,186 @@
     return id >= 31 && id <= 35;
   }
 
+  // --- Electric Currents on Green Wires ---
+  let electricCurrents = [];
+
+  class ElectricCurrent {
+    constructor(points, isLoop = false, initialProgress = 0) {
+      this.points = points;
+      this.isLoop = isLoop;
+      this.speed = 1.6;
+      this.dir = 1;
+      this.progress = initialProgress;
+      this.x = points[0] ? points[0].x : 0;
+      this.y = points[0] ? points[0].y : 0;
+
+      this.cumDist = [0];
+      for (let i = 1; i < points.length; i++) {
+        const dx = points[i].x - points[i - 1].x;
+        const dy = points[i].y - points[i - 1].y;
+        this.cumDist.push(this.cumDist[i - 1] + Math.sqrt(dx * dx + dy * dy));
+      }
+      this.totalDist = this.cumDist[this.cumDist.length - 1] || 1;
+      this.progress = (initialProgress % this.totalDist + this.totalDist) % this.totalDist;
+      this.updatePos();
+    }
+
+    updatePos() {
+      if (this.points.length <= 1) return;
+      let d = this.progress;
+      if (d < 0) d = 0;
+      if (d > this.totalDist) d = this.totalDist;
+
+      let seg = 0;
+      while (seg < this.cumDist.length - 1 && this.cumDist[seg + 1] < d) {
+        seg++;
+      }
+      const segStart = this.cumDist[seg];
+      const segLen = this.cumDist[seg + 1] - segStart;
+      const t = (segLen > 0) ? (d - segStart) / segLen : 0;
+      const p1 = this.points[seg];
+      const p2 = this.points[seg + 1] || p1;
+
+      this.x = p1.x + (p2.x - p1.x) * t;
+      this.y = p1.y + (p2.y - p1.y) * t;
+    }
+
+    update() {
+      if (this.points.length <= 1) return;
+
+      this.progress += this.dir * this.speed;
+
+      if (this.isLoop) {
+        if (this.progress >= this.totalDist) {
+          this.progress -= this.totalDist;
+        } else if (this.progress < 0) {
+          this.progress += this.totalDist;
+        }
+      } else {
+        if (this.progress >= this.totalDist) {
+          this.progress = this.totalDist;
+          this.dir = -1; // Reverse along the wire!
+        } else if (this.progress <= 0) {
+          this.progress = 0;
+          this.dir = 1; // Reverse forward!
+        }
+      }
+
+      this.updatePos();
+
+      // Emit subtle electric sparks
+      if (Math.random() < 0.2) {
+        addSparkles(this.x, this.y, '#00e5ff', 1);
+      }
+
+      // Check collision with player (lethal electrocution hazard)
+      if (currentState === GAME_STATE.PLAYING && player.invulnerableTimer <= 0) {
+        const px = player.x + player.w / 2;
+        const py = player.y + player.h / 2;
+        const dx = Math.abs(this.x - px);
+        const dy = Math.abs(this.y - py);
+        if (dx < (player.w / 2 + 5) && dy < (player.h / 2 + 5)) {
+          sound.play(4); // Electric shock sound
+          addSparkles(this.x, this.y, '#ffd028', 12);
+          addSparkles(this.x, this.y, '#00e5ff', 10);
+          addSparkles(this.x, this.y, '#ffffff', 8);
+          killPlayer();
+        }
+      }
+    }
+
+    draw(camX, camY) {
+      const sx = this.x - camX;
+      const sy = this.y - camY;
+
+      if (sx < -32 || sx > VIRTUAL_W + 32 || sy < -32 || sy > VIRTUAL_H + 32) return;
+
+      // Authentic electrical spark sprite from PACKRAT.EXE (Tile 18/19)
+      const sparkSprite = (Math.floor(gameTicks / 4) % 2 === 0) ? tileBitmaps[18] : tileBitmaps[19];
+      if (sparkSprite) {
+        ctx.drawImage(sparkSprite, Math.floor(sx - 16), Math.floor(sy - 4));
+      }
+
+      // Dynamic electrical corona & crackle lightning arc
+      ctx.save();
+      const glowR = 5 + Math.sin(gameTicks * 0.4) * 2;
+      ctx.beginPath();
+      ctx.arc(sx, sy, glowR, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(0, 229, 255, 0.45)';
+      ctx.fill();
+
+      // Bright white core
+      ctx.beginPath();
+      ctx.arc(sx, sy, 2.5, 0, Math.PI * 2);
+      ctx.fillStyle = '#ffffff';
+      ctx.fill();
+
+      // Electric arc spark
+      ctx.strokeStyle = '#ffd028';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      const angle = (gameTicks * 0.8) % (Math.PI * 2);
+      ctx.moveTo(sx, sy);
+      ctx.lineTo(sx + Math.cos(angle) * 7 + (Math.random() - 0.5) * 3, sy + Math.sin(angle) * 7 + (Math.random() - 0.5) * 3);
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+
+  function findElectricCircuits() {
+    electricCurrents = [];
+    const isWire = (t) => (t >= 23 && t <= 30);
+    const visited = new Set();
+    const dirs = [
+      { dx: 1, dy: 0 }, { dx: 0, dy: 1 }, { dx: -1, dy: 0 }, { dx: 0, dy: -1 }
+    ];
+
+    for (let pass = 0; pass < 2; pass++) {
+      for (let y = 0; y < MAP_H; y++) {
+        for (let x = 0; x < MAP_W; x++) {
+          const tid = getTileAt(x, y);
+          const isStart = (pass === 0) ? (tid === 23) : (isWire(tid) && !visited.has(y * MAP_W + x));
+          if (!isStart || visited.has(y * MAP_W + x)) continue;
+
+          visited.add(y * MAP_W + x);
+          const path = [{ x: x * TILE_SIZE + 7, y: y * TILE_SIZE + 7 }];
+          let cx = x, cy = y, prevX = -1, prevY = -1;
+          let isLoop = false;
+
+          let searching = true;
+          while (searching && path.length < 250) {
+            searching = false;
+            for (const d of dirs) {
+              const nx = cx + d.dx;
+              const ny = cy + d.dy;
+              if (nx === prevX && ny === prevY) continue;
+              if (nx < 0 || nx >= MAP_W || ny < 0 || ny >= MAP_H) continue;
+              const nTid = getTileAt(nx, ny);
+              if (isWire(nTid)) {
+                if (nx === x && ny === y) {
+                  isLoop = true;
+                  path.push({ x: nx * TILE_SIZE + 7, y: ny * TILE_SIZE + 7 });
+                  break;
+                }
+                visited.add(ny * MAP_W + nx);
+                prevX = cx; prevY = cy;
+                cx = nx; cy = ny;
+                path.push({ x: cx * TILE_SIZE + 7, y: cy * TILE_SIZE + 7 });
+                searching = (nTid !== 24);
+                break;
+              }
+            }
+          }
+
+          if (path.length >= 2) {
+            const initialOffset = electricCurrents.length * 40;
+            electricCurrents.push(new ElectricCurrent(path, isLoop, initialOffset));
+          }
+        }
+      }
+    }
+  }
+
   // --- Level Loading ---
   function loadLevel(idx) {
     const assets = window.PACKRAT_ASSETS;
@@ -697,10 +1000,12 @@
     // Spawn player at start coordinates
     player.reset(levelData.startX, levelData.startY);
 
-    // Initialize Movable Blocks and Enemies
+    // Initialize Movable Blocks, Enemies, and Electric Currents
     movableBlocks = [];
     enemies = [];
     particles = [];
+    electricCurrents = [];
+    findElectricCircuits();
 
     // Scan map for potential enemy patrol zones
     for (let ty = 0; ty < MAP_H; ty++) {
@@ -737,7 +1042,7 @@
   function updateHud() {
     document.getElementById('hudScore').textContent = String(score).padStart(6, '0');
     document.getElementById('hudHigh').textContent = String(highScore).padStart(6, '0');
-    document.getElementById('hudLevel').textContent = String(currentLevelIdx);
+    document.getElementById('hudLevel').textContent = String(currentLevelIdx + 1);
     
     let lifeIcons = '';
     for (let i = 0; i < lives; i++) {
@@ -850,6 +1155,7 @@
         const pColor = (tid === 16) ? '#00e5ff' : '#ffd028';
         addSparkles(targetTx * TILE_SIZE + 8, feetY * TILE_SIZE + 8, pColor, 12);
         movableBlocks.push(new MovableBlock(targetTx, feetY, tid));
+        dropStackedBlocksAbove(targetTx, feetY);
       } else {
         sound.play(5); // Warning bump
         addSparkles(targetTx * TILE_SIZE + 8, feetY * TILE_SIZE + 4, '#8b2020', 3);
@@ -894,6 +1200,7 @@
           }
           movableBlocks.push(blk);
           player.pushing = true;
+          dropStackedBlocksAbove(tx, ty);
         }
       }
     }
@@ -908,6 +1215,11 @@
 
     if (player.invulnerableTimer > 0) {
       player.invulnerableTimer--;
+    }
+
+    // Update Moving Electric Currents on Green Wires
+    for (const ec of electricCurrents) {
+      ec.update();
     }
 
     // --- Pipe Network Transport ---
@@ -979,11 +1291,37 @@
       player.dislodgeTimer = 0;
     }
 
+    if (player.spoolDropCooldown > 0) {
+      player.spoolDropCooldown--;
+    }
+
     // Slippery physics when on Ice Cubes (Tile 16)
     const feetCheckY = Math.floor((player.y + player.h + 1) / TILE_SIZE);
     const feetCheckX1 = Math.floor((player.x + 2) / TILE_SIZE);
     const feetCheckX2 = Math.floor((player.x + player.w - 2) / TILE_SIZE);
     const onIce = player.onGround && (getTileAt(feetCheckX1, feetCheckY) === 16 || getTileAt(feetCheckX2, feetCheckY) === 16);
+
+    // Thread Spool (Tile 17) Column Traversal & Step-Down
+    const midTy = Math.floor((player.y + player.h / 2) / TILE_SIZE);
+    const onSpool = player.onGround && (getTileAt(feetCheckX1, feetCheckY) === 17 || getTileAt(feetCheckX2, feetCheckY) === 17);
+    const touchingSpool = (getTileAt(centerTx, midTy) === 17) || (getTileAt(centerTx, feetCheckY) === 17);
+
+    // Stepping down spool-by-spool when Down key is held/pressed on a thread spool
+    if (onSpool && keys.down) {
+      if (player.spoolDropCooldown <= 0) {
+        player.ignoreSpoolY = feetCheckY;
+        player.spoolDropCooldown = 18; // Controlled 18-frame (~300ms) cadence for traversing down one by one
+        player.y += 3;
+        player.vy = 2.2;
+        player.onGround = false;
+      }
+    }
+
+    // Climbing up thread spool column with Up key
+    if (touchingSpool && keys.up && !keys.jump) {
+      player.vy = -1.8; // Controlled vertical climbing up the spool shaft
+      player.onGround = false;
+    }
 
     // Horizontal Acceleration
     const ACCEL = onIce ? 0.18 : 0.35;
@@ -1070,6 +1408,10 @@
       for (let tx = curLeftTile; tx <= curRightTile; tx++) {
         const tid = getTileAt(tx, newBottomTile);
         if (isTileFloorSolid(tid)) {
+          // If traversing down through a thread spool column, ignore the current spool being passed
+          if (tid === 17 && newBottomTile <= player.ignoreSpoolY) {
+            continue;
+          }
           if (tid === 21) {
             // Authentic rubber band trampoline bounce from PACKRAT.EXE (0x1a78: vy = (4 - vy) * 0.8)
             const incoming = Math.max(player.vy, 3.2);
@@ -1088,6 +1430,9 @@
             player.vy = 0;
             player.onGround = true;
             player.jumping = false;
+            if (tid !== 17 || newBottomTile > player.ignoreSpoolY) {
+              player.ignoreSpoolY = -1;
+            }
             break;
           }
         }
@@ -1180,6 +1525,11 @@
       }
     }
 
+    // --- Moving Electric Currents on Green Wires ---
+    for (const ec of electricCurrents) {
+      ec.update();
+    }
+
     // --- Update Movable Blocks ---
     for (let i = movableBlocks.length - 1; i >= 0; i--) {
       const mb = movableBlocks[i];
@@ -1252,9 +1602,11 @@
         let tid = rawTid % 36;
         if (tid === 0) continue;
 
-        // Animated water
+        // Animated water (Authentic 32-step lookup table from PACKRAT.EXE at DS:0x346)
         if (tid >= 11 && tid <= 14) {
-          tid = waterAnimFrame;
+          const WATER_ANIM_TABLE = [1, 2, 3, 3, 2, 1, 0, 0, 0, 1, 2, 3, 3, 3, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+          const animOffset = WATER_ANIM_TABLE[(Math.floor(gameTicks / 2)) % 32];
+          tid = 11 + animOffset;
         }
         // Animated electric sparks
         if (tid === 18 || tid === 19) {
@@ -1266,6 +1618,17 @@
           const screenX = tx * TILE_SIZE - camX;
           const screenY = ty * TILE_SIZE - camY;
           ctx.drawImage(sprite, screenX, screenY);
+
+          // Dynamic liquid water surface wave ripple and light glints
+          if (rawTid % 36 >= 11 && rawTid % 36 <= 14) {
+            const ripplePhase = (gameTicks * 0.18) % (Math.PI * 2);
+            const waveH = 2 + Math.sin(ripplePhase) * 1.5;
+            ctx.fillStyle = 'rgba(0, 229, 255, 0.45)';
+            ctx.fillRect(screenX + 4, screenY + 4, 24, waveH);
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.65)';
+            const glintX = screenX + 5 + ((gameTicks * 1.6) % 22);
+            ctx.fillRect(glintX, screenY + 4, 3, 1.5);
+          }
         }
       }
     }
@@ -1280,7 +1643,12 @@
       enemy.draw(camX, camY);
     }
 
-    // 4. Draw Player (The Pack Rat)
+    // 4. Draw Moving Electric Currents on Green Wires
+    for (const ec of electricCurrents) {
+      ec.draw(camX, camY);
+    }
+
+    // 5. Draw Player (The Pack Rat)
     renderPlayer(camX, camY);
 
     // 5. Draw Particles
@@ -1376,68 +1744,71 @@
     ctx.font = '10px "Press Start 2P", monospace';
     ctx.fillStyle = '#ffd028';
     ctx.textAlign = 'center';
-    ctx.fillText(`LEVEL ${currentLevelIdx} — ZOOM VIEW (M to return)`, VIRTUAL_W / 2, 14);
+    ctx.fillText(`LEVEL ${currentLevelIdx + 1} — ZOOM VIEW (M to return)`, VIRTUAL_W / 2, 14);
   }
 
   function renderTitleScreen() {
-    // Title background animation
-    ctx.fillStyle = '#0c101a';
-    ctx.fillRect(0, 0, VIRTUAL_W, VIRTUAL_H);
-
-    // Decorative retro grid lines
-    ctx.strokeStyle = '#182033';
-    ctx.lineWidth = 1;
-    for (let x = 0; x < VIRTUAL_W; x += 16) {
-      ctx.beginPath();
-      ctx.moveTo(x, 0);
-      ctx.lineTo(x, VIRTUAL_H);
-      ctx.stroke();
-    }
-    for (let y = 0; y < VIRTUAL_H; y += 16) {
-      ctx.beginPath();
-      ctx.moveTo(0, y);
-      ctx.lineTo(VIRTUAL_W, y);
-      ctx.stroke();
-    }
-
-    // Title logo
-    ctx.font = '16px "Press Start 2P", monospace';
-    ctx.fillStyle = '#ffd028';
-    ctx.textAlign = 'center';
-    ctx.shadowColor = 'rgba(255, 208, 40, 0.8)';
-    ctx.shadowBlur = 10;
-    ctx.fillText('THE PACK RAT', VIRTUAL_W / 2, 34);
-    ctx.shadowBlur = 0;
-
-    ctx.font = '8px "Press Start 2P", monospace';
-    ctx.fillStyle = '#00e5ff';
-    ctx.fillText('1992 VGA 256-COLOR CLASSIC', VIRTUAL_W / 2, 48);
-
-    ctx.font = '7px "Press Start 2P", monospace';
-    ctx.fillStyle = '#39ff14';
-    ctx.fillText('CONVERTED FROM ORIGINAL .EXE BY', VIRTUAL_W / 2, 63);
-    ctx.fillText('JUSTIN BOGNER, OCTOBER 2026', VIRTUAL_W / 2, 75);
-
-    ctx.fillStyle = '#8e99b3';
-    ctx.fillText('(C) 1992 BY STEVE BLANDING', VIRTUAL_W / 2, 88);
-
-    // Animated Pack Rat sprite showcase
-    const showcaseFrames = (ratBitmaps.right && ratBitmaps.right.walk && ratBitmaps.right.walk.length > 0) ? ratBitmaps.right.walk : [ratBitmaps.right?.idle];
-    const showcaseSprite = showcaseFrames[Math.floor(gameTicks / 8) % showcaseFrames.length];
-    if (showcaseSprite) {
-      ctx.drawImage(showcaseSprite, VIRTUAL_W / 2 - 10, 102);
+    if (houseImgLoaded && houseImg) {
+      // Draw memorial house background without squishing (exact 1.6 aspect ratio crop)
+      // Source image is 1200x896; cropping 1200x750 from y=120 frames the house roof apex, garage, driveway, and sidewalk perfectly
+      ctx.drawImage(houseImg, 0, 120, 1200, 750, 0, 0, VIRTUAL_W, VIRTUAL_H);
+    } else {
+      // Fallback retro grid
+      ctx.fillStyle = '#0c101a';
+      ctx.fillRect(0, 0, VIRTUAL_W, VIRTUAL_H);
+      ctx.strokeStyle = '#182033';
+      ctx.lineWidth = 1;
+      for (let x = 0; x < VIRTUAL_W; x += 16) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, VIRTUAL_H);
+        ctx.stroke();
+      }
+      for (let y = 0; y < VIRTUAL_H; y += 16) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(VIRTUAL_W, y);
+        ctx.stroke();
+      }
     }
 
-    // Press Enter to play
-    if (Math.floor(gameTicks / 30) % 2 === 0) {
-      ctx.font = '9px "Press Start 2P", monospace';
-      ctx.fillStyle = '#ffffff';
-      ctx.fillText('PRESS ENTER OR PLAY', VIRTUAL_W / 2, 154);
+    // The Pack Rat walking back and forth along the sidewalk!
+    titleRatX += titleRatDir * 0.9;
+    if (titleRatX >= 285) {
+      titleRatX = 285;
+      titleRatDir = -1;
+    } else if (titleRatX <= 15) {
+      titleRatX = 15;
+      titleRatDir = 1;
     }
 
-    ctx.font = '7px "Press Start 2P", monospace';
-    ctx.fillStyle = '#f59e0b';
-    ctx.fillText('SELECT OPTION FROM TOOLBAR BELOW', VIRTUAL_W / 2, 176);
+    const set = titleRatDir > 0 ? ratBitmaps.right : ratBitmaps.left;
+    const frames = (set && set.walk && set.walk.length > 0) ? set.walk : [set?.idle];
+    const walkIdx = Math.floor(gameTicks / 4) % (frames ? frames.length : 1);
+    const sprite = frames ? frames[walkIdx] : null;
+
+    if (sprite) {
+      // Sidewalk walking line is at y ≈ 166..185 on 320x200 canvas
+      // Sprite height is ~31px, so drawing at y = 144 places feet right on the sidewalk!
+      const ratY = 144;
+      ctx.drawImage(sprite, Math.floor(titleRatX), ratY);
+    }
+
+    // Foreground tree layer: rat walks BEHIND the tree trunk!
+    if (treeOverlayCanvas) {
+      ctx.drawImage(treeOverlayCanvas, 0, 120, 1200, 750, 0, 0, VIRTUAL_W, VIRTUAL_H);
+    }
+
+    // Flashing "PRESS ENTER TO PLAY" beneath the sidewalk under the rat
+    if (Math.floor(gameTicks / 20) % 2 === 0) {
+      ctx.font = '8px "Press Start 2P", monospace';
+      ctx.textAlign = 'center';
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = '#000000';
+      ctx.strokeText('PRESS ENTER TO PLAY', VIRTUAL_W / 2, 194);
+      ctx.fillStyle = '#ffd028';
+      ctx.fillText('PRESS ENTER TO PLAY', VIRTUAL_W / 2, 194);
+    }
   }
 
   function renderPauseOverlay() {
@@ -1469,7 +1840,7 @@
 
     ctx.font = '8px "Press Start 2P", monospace';
     ctx.fillStyle = '#ffffff';
-    ctx.fillText('PRESS ENTER OR PLAY TO RETRY', VIRTUAL_W / 2, VIRTUAL_H / 2 + 30);
+    ctx.fillText('PRESS ENTER TO RETRY', VIRTUAL_W / 2, VIRTUAL_H / 2 + 30);
   }
 
   function renderLevelClearOverlay() {
@@ -1604,7 +1975,7 @@
       card.id = `lvlBtn_${i}`;
       card.className = `level-card ${i === currentLevelIdx ? 'current' : ''}`;
       card.innerHTML = `
-        <span class="level-num">LVL ${i}</span>
+        <span class="level-num">LVL ${i + 1}</span>
         <span class="level-info">Start: (${lvl.startX}, ${lvl.startY})</span>
       `;
       card.addEventListener('click', () => {
@@ -1865,6 +2236,7 @@
     set enemies(e) { enemies = e; },
     get movableBlocks() { return movableBlocks; },
     get particles() { return particles; },
+    get electricCurrents() { return electricCurrents; },
     // Tiles & collisions
     getTileAt,
     setTileAt,
@@ -1884,6 +2256,10 @@
     // Stepping & physics simulation
     update,
     render,
+    get treeOverlayCanvas() { return treeOverlayCanvas; },
+    get houseImgLoaded() { return houseImgLoaded; },
+    get titleRatX() { return titleRatX; },
+    set titleRatX(v) { titleRatX = v; },
     step(frames = 1) {
       for (let i = 0; i < frames; i++) {
         update();

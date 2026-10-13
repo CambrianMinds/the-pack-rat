@@ -378,6 +378,63 @@
             // Spool should stop before wall (at x=27) and write back as tile 17
             assert.equal(PACKRAT.getTileAt(27, 50), 17, 'Spool should come to rest at x=27 before wall');
           }
+        },
+        {
+          name: 'Pressing Down on thread spool column steps down to the spool below one by one',
+          fn(PACKRAT, assert) {
+            PACKRAT.loadLevel(0);
+            PACKRAT.state = PACKRAT.GAME_STATE.PLAYING;
+
+            // Stack two thread spools vertically at x=20, y=40 and y=41
+            PACKRAT.setTileAt(20, 39, 0);
+            PACKRAT.setTileAt(20, 40, 17); // Spool 1
+            PACKRAT.setTileAt(20, 41, 17); // Spool 2
+            PACKRAT.setTileAt(20, 42, 1);  // Solid floor
+
+            // Place rat standing on Spool 1
+            PACKRAT.player.x = 20 * 16 + 1;
+            PACKRAT.player.y = 40 * 16 - PACKRAT.player.h;
+            PACKRAT.player.vx = 0;
+            PACKRAT.player.vy = 0;
+            PACKRAT.player.onGround = true;
+
+            // Press Down to step down spool-by-spool
+            PACKRAT.keys.down = true;
+            PACKRAT.step(2);
+            PACKRAT.keys.down = false;
+            PACKRAT.step(6);
+
+            // Player should have stepped down cleanly from Spool 1 (y=40) to Spool 2 (y=41)
+            assert.equal(PACKRAT.player.onGround, true, 'Player should land solid on the next spool down');
+            assert.equal(PACKRAT.player.y, 41 * 16 - PACKRAT.player.h, 'Player should be standing on Spool 2 (one by one step-down)');
+          }
+        },
+        {
+          name: 'Holding Up while touching thread spool column climbs upward along the spool shaft',
+          fn(PACKRAT, assert) {
+            PACKRAT.loadLevel(0);
+            PACKRAT.state = PACKRAT.GAME_STATE.PLAYING;
+
+            // Stack thread spools at x=20, y=38..41
+            for (let y = 38; y <= 41; y++) {
+              PACKRAT.setTileAt(20, y, 17);
+            }
+
+            // Place rat at lower spool (y=41)
+            PACKRAT.player.x = 20 * 16 + 1;
+            PACKRAT.player.y = 41 * 16 - PACKRAT.player.h;
+            PACKRAT.player.onGround = true;
+            const startY = PACKRAT.player.y;
+
+            // Hold Up
+            PACKRAT.keys.up = true;
+            PACKRAT.step(6);
+            PACKRAT.keys.up = false;
+
+            // Player should have climbed upward
+            assert.lessThan(PACKRAT.player.y, startY, 'Holding Up on spool column should climb upward');
+            assert.lessThan(PACKRAT.player.vy, 0, 'Climbing impulse vy must be negative');
+          }
         }
       ]
     },
@@ -416,6 +473,44 @@
             const iceBlock = PACKRAT.movableBlocks.find(b => b.tileId === 16);
             assert.ok(iceBlock, 'Sliding ice block must exist in movableBlocks');
             assert.closeTo(iceBlock.vx, 2.4, 0.01, 'Ice block should slide at speed 2.4');
+          }
+        },
+        {
+          name: 'Pushing bottom block from under a stack causes blocks above to fall instead of floating',
+          fn(PACKRAT, assert) {
+            PACKRAT.loadLevel(0);
+            PACKRAT.state = PACKRAT.GAME_STATE.PLAYING;
+            PACKRAT.movableBlocks.length = 0;
+
+            // Solid floor at y=52
+            for (let x = 10; x <= 20; x++) PACKRAT.setTileAt(x, 52, 1);
+            PACKRAT.setTileAt(15, 51, 1); // Stop wall
+
+            // Stack of 2 ice blocks: bottom at (10, 51), top at (10, 50)
+            PACKRAT.setTileAt(10, 51, 16);
+            PACKRAT.setTileAt(10, 50, 16);
+            PACKRAT.setTileAt(11, 51, 0);
+            PACKRAT.setTileAt(11, 50, 0);
+
+            PACKRAT.player.x = 10 * 16 - PACKRAT.player.w - 1;
+            PACKRAT.player.y = 51 * 16;
+            PACKRAT.player.facing = 1;
+
+            // Push bottom ice block (takes 3 hits)
+            PACKRAT.tryPushBlock(1);
+            PACKRAT.tryPushBlock(1);
+            PACKRAT.tryPushBlock(1);
+
+            // Immediately on the 3rd push hit, top block must detach from grid and fall
+            assert.equal(PACKRAT.getTileAt(10, 50), 0, 'Top block must not remain floating in static grid');
+            assert.equal(PACKRAT.movableBlocks.length, 2, 'Both pushed and stacked blocks become dynamic entities');
+
+            // Let physics simulate settlement
+            PACKRAT.step(60);
+
+            // Top block must have fallen down to y=51 and landed solid on the floor
+            assert.equal(PACKRAT.getTileAt(10, 51), 16, 'Top block must fall down and settle onto floor at y=51');
+            assert.equal(PACKRAT.getTileAt(10, 50), 0, 'Space at y=50 must remain empty air');
           }
         },
         {
@@ -686,6 +781,42 @@
 
             assert.equal(PACKRAT.lives, 2, 'Electric wire must deduct 1 life');
             assert.equal(PACKRAT.getTileAt(10, 50), 19, 'Wire tile 18 must spark into tile 19');
+          }
+        },
+        {
+          name: 'Electric current moving along green wire network patrols waypoints and electrocutes player on contact',
+          fn(PACKRAT, assert) {
+            PACKRAT.loadLevel(1); // Level 2 contains authentic green wire circuits
+            PACKRAT.state = PACKRAT.GAME_STATE.PLAYING;
+            PACKRAT.lives = 3;
+            PACKRAT.player.invulnerableTimer = 0;
+
+            assert.greaterThan(PACKRAT.electricCurrents.length, 0, 'Level 2 should initialize active electric currents');
+            const ec = PACKRAT.electricCurrents[0];
+            const startX = ec.x;
+            const startY = ec.y;
+
+            // Step game physics and verify electricity moves along the wire
+            PACKRAT.step(10);
+            const moved = (ec.x !== startX || ec.y !== startY);
+            assert.equal(moved, true, 'Electric spark should actively move along wire waypoints');
+
+            // Place player directly on the moving electrical current
+            PACKRAT.player.x = ec.x - PACKRAT.player.w / 2;
+            PACKRAT.player.y = ec.y - PACKRAT.player.h / 2;
+            PACKRAT.step(1);
+
+            assert.equal(PACKRAT.lives, 2, 'Touching moving electrical current must electrocute and deduct 1 life');
+          }
+        },
+        {
+          name: 'Water tiles animate authentic 32-step ripple cycle from PACKRAT.EXE lookup table',
+          fn(PACKRAT, assert) {
+            const WATER_ANIM_TABLE = [1, 2, 3, 3, 2, 1, 0, 0, 0, 1, 2, 3, 3, 3, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+            assert.equal(WATER_ANIM_TABLE.length, 32, 'Lookup table must have exactly 32 steps');
+            assert.equal(WATER_ANIM_TABLE[0], 1, 'First ripple step is offset 1 (Tile 12)');
+            assert.equal(WATER_ANIM_TABLE[2], 3, 'Peak ripple crest is offset 3 (Tile 14)');
+            assert.equal(WATER_ANIM_TABLE[6], 0, 'Resting water returns to offset 0 (Tile 11)');
           }
         },
         {

@@ -14,7 +14,14 @@
     <header class="arcade-header">
       <div class="brand-section">
         <h1 class="brand-logo">THE PACK RAT</h1>
-        <span class="brand-badge">CONVERTED FROM ORIGINAL .EXE BY JUSTIN BOGNER (OCT 2026)</span>
+        <div class="header-credits">
+          <div class="credit-prominent">
+            CONVERTED BY JUSTIN BOGNER • OCTOBER 2026
+          </div>
+          <div class="credit-sub">
+            ORIGINAL MS-DOS GAME © 1992 STEVE BLANDING
+          </div>
+        </div>
       </div>
       <div class="header-controls">
         <button id="btnSound" class="btn-icon" title="Toggle Sound (F2)">
@@ -52,7 +59,7 @@
         </div>
         <div class="hud-item">
           <span class="hud-label">LEVEL:</span>
-          <span class="hud-value" id="hudLevel">0</span>
+          <span class="hud-value" id="hudLevel">1</span>
         </div>
         <div class="hud-item">
           <span class="hud-label">LIVES:</span>
@@ -69,7 +76,6 @@
       <button id="btnEditor" class="btn-action cyan">🛠 LEVEL EDITOR</button>
       <button id="btnScores" class="btn-action">🏆 HIGH SCORES</button>
       <button id="btnHelp" class="btn-action">❓ HOW TO PLAY (F1)</button>
-      <a href="test.html" class="btn-action" style="text-decoration: none; display: inline-flex; align-items: center; justify-content: center;">🧪 E2E TESTS</a>
       <button id="btnAbout" class="btn-action">ℹ ABOUT & ARCHIVE</button>
     </nav>
 
@@ -102,7 +108,7 @@
   <div class="modal-overlay" id="modalLevels">
     <div class="modal-card">
       <div class="modal-header">
-        <h2 class="modal-title">SELECT LEVEL (0 - 15)</h2>
+        <h2 class="modal-title">SELECT LEVEL (1 - 16)</h2>
         <button class="modal-close" data-close>&times;</button>
       </div>
       <div class="modal-body">

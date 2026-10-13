@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>The Pack Rat (1992) — Authentic Web Edition</title>
+  <meta name="description" content="A complete deconstruction and faithful web preservation of Steve Blanding's classic 1992 256-color VGA platformer The Pack Rat. Play directly in your browser without installation.">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <div id="app-container">
+    <!-- Arcade Marquee & Header -->
+    <header class="arcade-header">
+      <div class="brand-section">
+        <h1 class="brand-logo">THE PACK RAT</h1>
+        <span class="brand-badge">CONVERTED FROM ORIGINAL .EXE BY JUSTIN BOGNER (OCT 2026)</span>
+      </div>
+      <div class="header-controls">
+        <button id="btnSound" class="btn-icon" title="Toggle Sound (F2)">
+          <span class="icon">🔊</span> <span class="lbl">SOUND: ON</span>
+        </button>
+        <button id="btnCrt" class="btn-icon active" title="Toggle CRT Scanlines">
+          <span class="icon">📺</span> <span class="lbl">CRT: ON</span>
+        </button>
+        <button id="btnZoom" class="btn-icon" title="Minimap / Zoom View (Z)">
+          <span class="icon">🗺️</span> <span class="lbl">ZOOM</span>
+        </button>
+        <button id="btnFullscreen" class="btn-icon" title="Toggle Fullscreen">
+          <span class="icon">⛶</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Arcade Cabinet Bezel -->
+    <main class="cabinet-bezel">
+      <div class="crt-frame" id="crtFrame">
+        <canvas id="gameCanvas" width="320" height="200"></canvas>
+        <div class="crt-overlay" id="crtOverlay"></div>
+        <div class="crt-glow"></div>
+      </div>
+
+      <!-- Quick In-Game HUD -->
+      <div class="hud-bar" id="hudBar">
+        <div class="hud-item">
+          <span class="hud-label">SCORE:</span>
+          <span class="hud-value" id="hudScore">000000</span>
+        </div>
+        <div class="hud-item">
+          <span class="hud-label">HIGH:</span>
+          <span class="hud-value" id="hudHigh">010000</span>
+        </div>
+        <div class="hud-item">
+          <span class="hud-label">LEVEL:</span>
+          <span class="hud-value" id="hudLevel">0</span>
+        </div>
+        <div class="hud-item">
+          <span class="hud-label">LIVES:</span>
+          <div class="hud-lives-icons" id="hudLives">🐀 🐀 🐀</div>
+        </div>
+      </div>
+    </main>
+
+    <!-- Main Toolbar -->
+    <nav class="action-toolbar">
+      <button id="btnPlay" class="btn-action primary">▶ PLAY GAME</button>
+      <button id="btnLevels" class="btn-action">📂 LEVEL SELECT</button>
+      <button id="btnControls" class="btn-action">🎮 CONTROLS</button>
+      <button id="btnEditor" class="btn-action cyan">🛠 LEVEL EDITOR</button>
+      <button id="btnScores" class="btn-action">🏆 HIGH SCORES</button>
+      <button id="btnHelp" class="btn-action">❓ HOW TO PLAY (F1)</button>
+      <button id="btnAbout" class="btn-action">ℹ ABOUT & ARCHIVE</button>
+    </nav>
+
+    <!-- Mobile Virtual Controls -->
+    <div class="touch-controls" id="touchControls">
+      <div class="touch-dpad">
+        <div></div>
+        <button class="touch-btn" id="touchUp" aria-label="Look Up">▲</button>
+        <div></div>
+        <button class="touch-btn" id="touchLeft" aria-label="Move Left">◀</button>
+        <div></div>
+        <button class="touch-btn" id="touchRight" aria-label="Move Right">▶</button>
+        <div></div>
+        <button class="touch-btn" id="touchDown" aria-label="Look Down / Dislodge">▼</button>
+        <div></div>
+      </div>
+      <div class="touch-actions">
+        <button class="touch-action-btn secondary" id="touchPush" aria-label="Push">PUSH</button>
+        <button class="touch-action-btn" id="touchJump" aria-label="Jump">JUMP</button>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="arcade-footer">
+      <p>Original MS-DOS Game © 1992 by Steve Blanding. Converted from the original .exe by Justin Bogner, October 2026. Preserved with 100% authentic 256-color VGA graphics, levels, and PC speaker audio.</p>
+    </footer>
+  </div>
+
+  <!-- MODAL: LEVEL SELECT -->
+  <div class="modal-overlay" id="modalLevels">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h2 class="modal-title">SELECT LEVEL (0 - 15)</h2>
+        <button class="modal-close" data-close>&times;</button>
+      </div>
+      <div class="modal-body">
+        <p>Choose any level from the authentic 1992 encrypted level archive (PACKRAT.001):</p>
+        <div class="level-grid" id="levelGridContainer"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: HOW TO PLAY -->
+  <div class="modal-overlay" id="modalHelp">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h2 class="modal-title">GAME DOCUMENTATION & CONTROLS</h2>
+        <button class="modal-close" data-close>&times;</button>
+      </div>
+      <div class="modal-body">
+        <h3>STORY & OBJECTIVE</h3>
+        <p>You are <strong>The Pack Rat</strong>, a debonair little rodent with a predilection for shiny little things! Your goal is to collect as many baubles as you can, navigate puzzles and hazards, and find the <strong>Mouse Hole</strong> to advance to next levels.</p>
+        
+        <h3>BAUBLES & POINTS</h3>
+        <ul>
+          <li><strong>Buttons:</strong> 10 points</li>
+          <li><strong>Silver Coins:</strong> 25 points</li>
+          <li><strong>Gold Coins:</strong> 50 points</li>
+          <li><strong>Cookies:</strong> 100 points</li>
+          <li><strong>Cheeses:</strong> 250 points</li>
+          <li><strong>Level Completion:</strong> 500 bonus points!</li>
+          <li><strong>Extra Life:</strong> Awarded every 10,000 points!</li>
+        </ul>
+
+        <h3>CONTROLS</h3>
+        <ul>
+          <li><kbd>←</kbd> <kbd>→</kbd> or <kbd>A</kbd> <kbd>D</kbd> : Move Left and Right</li>
+          <li><kbd>Space</kbd>, <kbd>Ctrl</kbd>, or <kbd>Z</kbd> : Jump</li>
+          <li><kbd>Alt</kbd>, <kbd>Shift</kbd>, or <kbd>X</kbd> : Push objects and movable crates</li>
+          <li><kbd>↑</kbd> or <kbd>W</kbd> : Look Up (scroll camera view up)</li>
+          <li><kbd>↓</kbd> or <kbd>S</kbd> : Look Down & Dislodge fragile blocks beneath you</li>
+          <li><kbd>M</kbd> or <kbd>Z</kbd> : Full Level Zoom / Minimap mode</li>
+          <li><kbd>K</kbd> : Kill Pack Rat (if trapped)</li>
+          <li><kbd>F1</kbd> : Help Menu | <kbd>F2</kbd> : Sound On/Off | <kbd>F3</kbd> or <kbd>Esc</kbd> : Pause</li>
+          <li><kbd>F10</kbd> : Toggle Score HUD</li>
+        </ul>
+
+        <h3>TIPS & SECRETS</h3>
+        <p>• <strong>Pipes & Tubes:</strong> Jump into pipe entrances to ride high-speed tube transport networks!</p>
+        <p>• <strong>Illusions:</strong> Not everything is what it seems. Some walls and water pools are illusionary passages leading to secret rooms!</p>
+        <p>• <strong>Mousetraps & Hazards:</strong> Watch out for sharp mousetraps, live electrical currents, deep water, and patrolling enemy rats.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: HIGH SCORES -->
+  <div class="modal-overlay" id="modalScores">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h2 class="modal-title">HALL OF FAME — HIGH SCORES</h2>
+        <button class="modal-close" data-close>&times;</button>
+      </div>
+      <div class="modal-body">
+        <div id="highScoresList" style="font-family: var(--font-retro); font-size: 12px; line-height: 2;"></div>
+        <div style="margin-top: 20px; text-align: center;">
+          <button id="btnResetScores" class="btn-action" style="font-size: 11px;">Reset High Scores</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: CUSTOMIZE CONTROLS -->
+  <div class="modal-overlay" id="modalControls">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h2 class="modal-title">CUSTOMIZE CONTROLS</h2>
+        <button class="modal-close" data-close>&times;</button>
+      </div>
+      <div class="modal-body">
+        <p>Click any action to rebind its primary key. Press any key on your keyboard to assign it:</p>
+        <div id="controlsBindingList" class="controls-list"></div>
+        <div style="margin-top: 20px; display: flex; justify-content: space-between; align-items: center;">
+          <button id="btnResetControls" class="btn-action" style="font-size: 11px;">↺ Reset to Defaults</button>
+          <button class="btn-action primary" data-close style="font-size: 11px;">Done</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: LEVEL EDITOR -->
+  <div class="modal-overlay" id="modalEditor">
+    <div class="modal-card" style="max-width: 880px;">
+      <div class="modal-header">
+        <h2 class="modal-title">BUILT-IN LEVEL EDITOR</h2>
+        <button class="modal-close" data-close>&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="editor-container">
+          <div class="editor-toolbar">
+            <label style="font-size: 12px; font-weight: bold;">Tile: <span id="editorCurrentTileName">Brick</span></label>
+            <label style="font-size: 12px; font-weight: bold; margin-left: 10px;">BG Color: <input type="number" id="editorBgColor" min="0" max="255" value="3" style="width: 50px; padding: 2px 4px; background: #222; color: #fff; border: 1px solid #444; border-radius: 4px;"></label>
+            <label style="font-size: 12px; font-weight: bold; margin-left: 10px;">Hole Warp Level: <input type="number" id="editorHoleDest" min="0" max="99" value="1" style="width: 50px; padding: 2px 4px; background: #222; color: #fff; border: 1px solid #444; border-radius: 4px;"></label>
+            <button id="btnEditorTest" class="btn-action primary" style="padding: 4px 10px; font-size: 12px; margin-left: auto;">▶ TEST LEVEL</button>
+            <button id="btnEditorExport" class="btn-action" style="padding: 4px 10px; font-size: 12px;">💾 EXPORT</button>
+            <button id="btnEditorClear" class="btn-action" style="padding: 4px 10px; font-size: 12px;">🗑 CLEAR</button>
+          </div>
+          <div class="editor-tile-palette" id="editorPalette"></div>
+          <p style="font-size: 11px; color: var(--text-muted);">Click on tiles to select. Draw directly onto the level canvas or switch back to game view to playtest!</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: ABOUT / ARCHIVE -->
+  <div class="modal-overlay" id="modalAbout">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h2 class="modal-title">ABOUT THE PACK RAT (1992)</h2>
+        <button class="modal-close" data-close>&times;</button>
+      </div>
+      <div class="modal-body">
+        <h3>CONVERSION & PRESERVATION</h3>
+        <p style="color: var(--neon-cyan); font-weight: bold;">Converted from the original .exe by Justin Bogner, October 2026.</p>
+        <p>This web edition reverse-engineers and preserves the 1992 MS-DOS release with 100% authentic extracted binary data (sprites, palettes, sound synthesis, and arithmetic-compressed levels).</p>
+
+        <h3>ORIGINAL 1992 SHAREWARE AUTHOR</h3>
+        <p><strong>Created by:</strong> Steve Blanding (Redmond, Washington, 1992)<br>
+        <em>"Special thanks to Jon Thomason for inspiration, ideas, and feedback. Extra special thanks to my wife Doreen and to our boy Kray who was born when I began work on this project."</em></p>
+        
+        <h3>DECONSTRUCTION DETAILS</h3>
+        <ul>
+          <li><strong>PACKRAT.001:</strong> Decompressed adaptive binary arithmetic compression algorithm, recovering all 16 original 64×64 levels and warp destinations.</li>
+          <li><strong>PACKRAT.EXE:</strong> Extracted 256-color VGA DAC palette, 52 tiles, 17 Pack Rat animation frames, 4 running Enemy Rat frames, animated water, electric hazards, and traps.</li>
+          <li><strong>Audio Synthesizer:</strong> Extracted PC speaker frequency/duration pitch tables and synthesized via Web Audio API.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script src="assets.js"></script>
+  <script src="audio.js"></script>
+  <script src="game.js"></script>
+</body>
+</html>

@@ -1,0 +1,189 @@
+                                 The Pack Rat
+                         (c) 1992 - by Steve Blanding
+
+                              Game Documentation
+
+
+System Requirements:
+
+The Pack Rat is a 256-color four-way scrolling arcade game.  The heavy use  of
+256 color animation in  this game taxes  the limits of  most computers.  As  a
+result, this  game  requires  at  least  a  386  micro-processor  with  a  VGA
+compatible graphics card.  The game plays best on at least a 25mhz 386.
+
+If the game appears sluggish or jerky then  you may want to use the F8 key  to
+shrink the game window.  Just push F8 while the game is playing.  If it  still
+plays too slow, push it again.  You  might also try removing the score  window
+by pressing F10.  If you want to enlarge the game window, push F9.
+
+
+How to Play the Game:
+
+In this game, you become The  Pack  Rat,  a  debonair  little  rodent  with  a
+predilection for shinny little things.   Your  goal  is  to  collect  as  many
+baubles as you can.
+
+As you move through each level, you will face challenges and obstacles as  you
+work to collect baubles and find  your mouse hole so  that you can advance  to
+the next level.  Each level may have  more than one mouse hole, each of  which
+will take you to a different  level, so make sure  you look everywhere or  you
+might miss something.
+
+Points are gained by collecting baubles and completing levels.  Every time you
+complete a  level you  gain 500  points.  The  various baubles  are scored  as
+follows:
+
+     Buttons.............10 points
+     Silver Coins........25 points
+     Gold Coins..........50 points
+     Cookies............100 points
+     Cheeses............250 points
+
+You start the game with three  lives and you  gain a new  life for each  10000
+points you score.  You loose a life  by falling off the bottom of the  screen,
+falling in  water, getting  electrocuted, getting  caught in  traps, or  being
+caught by an enemy rat.
+
+You control The Pack Rat  by using the arrow keys  and the CTRL and ALT  keys.
+The left and right arrows move The Pack  Rat to the left and right.  The  CTRL
+key causes him to jump.  The ALT key can be used to push objects -- just  hold
+down the ALT key as you run into the object.
+
+You can look up by  pressing the up arrow and  look down by pressing the  down
+arrow.  But be careful when  looking down,  the down  arrow will  occasionally
+dislodge a block you are standing  on.  A block may  also be dislodged if  you
+jump on it too hard or too many times.
+
+As a general rule, if there is nothing on the other side of a block, it  might
+not be very solid.  Only bricks are so solid that they can never be moved.
+
+HINT: Not everything is  what  it  seems.   Some  things  on  the  screen  are
+illusionary.  You can walk right through  illusionary bricks and you will  not
+be killed by illusionary water.  Illusions often conceal hidden rooms or bonus
+points.
+
+
+Keys used during game play:
+
+F1   - HELP!
+F2   - toggle sound on/off
+F3   - pause the game
+F8   - shrink the game window (do this if the game plays too slowly)
+F9   - grow the game window (do this if you want to see more at once)
+F10  - hide the score box (use to gain a little more speed or to see behind it)
+<-   - move left
+->   - move right
+up   - look up
+down - look down and possibly dislodge the block beneath you
+CTRL - jump
+ALT  - push
+K    - kill The Pack Rat (do this if you get stuck)
+ESC  - abort the game
+
+
+How to Build Your Own Levels:
+
+To build your own levels, you first need to enter the level editor.  The level
+editor allows you to edit  levels one level  at a time.   Levels are 64  tiles
+wide and 64 tiles high.  They are identified by number and can have any number
+from 0 to 9999.  The game always starts play on level 0.
+
+Be warned that if you  save a high level, then  the editor will create a  file
+that contains space for that  level plus every level  with a number less  than
+that, whether you have created them or not.  Therefore, if you save a level as
+level number 100 then  you will have  created a file  containing at least  101
+levels!  That would be an extremely large file.
+
+The default levels for The Pack Rat are compressed to save disk space but  any
+levels that you create  using the level editor  will not be compressed.   This
+can result in some large  files so be sure that  you have plenty of free  disk
+space if you set out to design your own levels.
+
+You build a level by  selecting a background  color, placing tiles,  selecting
+the Pack Rat's starting position, and saving the level to a file.
+
+Press the B key to edit the background color.  The number at the bottom of the
+screen will be highlighted.  Use the  + or - key  to increase or decrease  the
+color value or you can  enter the number using  the number keys.  Press  enter
+when you are satisfied with your selection.
+
+Press the V key to select the level you wish to edit.  Select the level number
+the same way as you selected the background color.
+
+Once you have selected a level number you can use the S key to save your level
+in that slot or you can use the L key to load the level that is saved in  that
+slot (if one exists).
+
+The F key allows  you to enter  the name of  the file you  want to edit.   The
+default name  is  "PACKRAT".   (All  level  files  are  saved  with  the  .LVL
+extension.)
+
+To place a tile,  first select  the tile  you want  by pressing  the key  that
+appears beneath the tile on the menu and  then use the arrow keys to move  the
+cursor to the desired location  and place  the tile  with the  enter key.   To
+select from the upper row of tiles use the shift key.  Press the space bar  to
+clear your selection (enabling you to erase tiles with the enter key).
+
+When you place a mouse  hole you  will see  a number  in the  upper left  hand
+corner of the mouse hole.  This number is the level that will be reached  when
+the player goes through this mouse hole.   Put the cursor over the number  and
+press the + or - key to change this number.
+
+Press F1 within the level editor for a help menu.
+
+Press Q to leave the level editor and return to the main menu.
+
+
+About The Pack Rat:
+
+This game was begun in  the fall  of 1991  as a  test-bed for  a new  graphics
+engine that I was developing in my  spare time.  Now, more than a year  later,
+the game sports a completely  different  graphics  engine  and  the  game  has
+steadily evolved in to what you see before you.
+
+Because The Pack Rat was never really intended to be more than a test-bed  for
+my graphics engine, some details such as sound card support, joystick support,
+and mouse support were left out.  I debated whether I should even release this
+project but I finally decided that in spite of its short comings it turned out
+to be a rather entertaining  game.  I figured  that I might  as well share  it
+with the world and let you enjoy it too.
+
+As it turns out, The  Pack Rat  is not  really a  very good  showcase for  the
+graphics engine that runs under  the hood.   The graphics  engine is  actually
+capable of performing much more complex animation without serious  degradation
+of performance.  I intend to move on  to much more exciting projects now  that
+I'm done working on The Pack Rat.
+
+
+How to Register:
+
+The Pack Rat is being distributed under a concept called shareware.  This is a
+copyrighted  program;  however  permission  is  granted  to  freely  copy  and
+distribute this program so long as the following conditions are met:
+
+     1. This program must always be distributed with the following files:
+          PACKRAT.EXE  -- the code for the game
+          PACKRAT.001  -- the default levels (encrypted)
+          PACKRAT.TXT  -- this documentation
+          REGISTER.FRM -- the registration form
+     2. The program and its accompanying files may not be reverse-engineered,
+        modified, decompiled, altered or tampered with in any way.
+
+If you have enjoyed this  game, you  are encouraged  to register  it with  the
+author by sending $10 along with a completed copy of the registration form  to
+the following address:
+
+                            Steve Blanding
+                            8501 Willows Rd. #222
+                            Redmond, WA 98052
+
+In return for your registration, you will receive the most up to date  version
+of this game (which includes the  level  editor)  in  addition  to  any  other
+shareware programs the author may have released.
+
+
+Disclaimer:
+
+This game is an  independent work  that is  not affiliated  with any  software
+publishing organization.  The author assumes no responsibility for any damages
+that might be caused by the execution of this program.

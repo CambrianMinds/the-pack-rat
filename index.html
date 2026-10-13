@@ -49,8 +49,8 @@
         <button id="btnSound" class="btn-icon" title="Toggle Sound (F2)">
           <span class="icon">🔊</span> <span class="lbl">SOUND: ON</span>
         </button>
-        <button id="btnCrt" class="btn-icon active" title="Toggle CRT Scanlines">
-          <span class="icon">📺</span> <span class="lbl">CRT: ON</span>
+        <button id="btnCrt" class="btn-icon" title="Toggle CRT Scanlines (C)">
+          <span class="icon">📺</span> <span class="lbl">CRT: OFF</span>
         </button>
         <button id="btnZoom" class="btn-icon" title="Minimap / Zoom View (Z)">
           <span class="icon">🗺️</span> <span class="lbl">ZOOM</span>
@@ -65,7 +65,7 @@
     <main class="cabinet-bezel">
       <div class="crt-frame" id="crtFrame">
         <canvas id="gameCanvas" width="320" height="200"></canvas>
-        <div class="crt-overlay" id="crtOverlay"></div>
+        <div class="crt-overlay hidden" id="crtOverlay"></div>
         <div class="crt-glow"></div>
       </div>
 

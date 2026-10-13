@@ -232,6 +232,11 @@ body::before {
   pointer-events: none;
   background: radial-gradient(circle at 50% 50%, transparent 65%, rgba(0, 0, 0, 0.5) 100%);
   z-index: 11;
+  transition: opacity 0.3s;
+}
+
+.crt-overlay.hidden ~ .crt-glow {
+  opacity: 0;
 }
 
 /* HUD Overlay on Canvas */

@@ -1,7 +1,7 @@
 # The Pack Rat (1992) — Authentic Web Edition
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Tests: 44/44 Passing](https://img.shields.io/badge/Tests-44%2F44%20Passing-brightgreen.svg)](test.html)
+[![Tests: 45/45 Passing](https://img.shields.io/badge/Tests-45%2F45%20Passing-brightgreen.svg)](test.html)
 [![Platform: Web & Mobile](https://img.shields.io/badge/Platform-Web%20%7C%20Mobile-orange.svg)](#-features--preservation-highlights)
 [![Zero Dependencies](https://img.shields.io/badge/Dependencies-Zero%20(Pure%20Vanilla%20JS)-informational.svg)](#-quick-start)
 [![DOS Game Preservation](https://img.shields.io/badge/Preservation-MS--DOS%201992-purple.svg)](#-historical-context--preservation)
@@ -68,7 +68,7 @@ Deploy directly to **GitHub Pages** (see [GitHub Pages Deployment](#-github-page
 - 📺 **Arcade CRT Shader:** Optional authentic scanline, shadow mask, and phosphor glow filter.
 - 🏆 **Persistent Hall of Fame:** Local high-score tracking pre-populated with Steve Blanding's original 1992 leaderboard.
 - 🛠️ **Built-in 64×64 Level Editor:** Create, test-play, and export custom levels with mouse hole warp destinations and custom palettes.
-- 🧪 **44-Test E2E Verification Suite:** Automated headless and in-browser testing validating every collision, physics interaction, and mechanic against DOS ground truth.
+- 🧪 **45-Test E2E Verification Suite:** Automated headless and in-browser testing validating every collision, physics interaction, and mechanic against DOS ground truth.
 
 ---
 
@@ -182,7 +182,7 @@ the-pack-rat/
 
 ## 🧪 Automated Test Suite
 
-A comprehensive test suite of **44 end-to-end tests** validates the game engine against DOS behavior:
+A comprehensive test suite of **45 end-to-end tests** validates the game engine against DOS behavior:
 
 - **Collision & Map Bounds:** Floor detection, pit death boundaries, void falloff, horizontal borders.
 - **DOS Physics:** Jump velocity, gravity acceleration, variable height impulse, ceiling collision, ice friction.

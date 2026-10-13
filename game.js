@@ -645,6 +645,12 @@
         toggleSoundSetting();
         e.preventDefault();
         break;
+      case 'KeyC':
+        if (!e.ctrlKey && !e.altKey && !e.metaKey && document.activeElement?.tagName !== 'INPUT') {
+          toggleCrt();
+          e.preventDefault();
+        }
+        break;
       case 'F10':
         showHud = !showHud;
         document.getElementById('hudBar').style.display = showHud ? 'flex' : 'none';
@@ -2178,13 +2184,24 @@
 
   document.getElementById('btnZoom')?.addEventListener('click', toggleMinimap);
 
-  document.getElementById('btnCrt')?.addEventListener('click', () => {
+  function toggleCrt(forceState) {
     const overlay = document.getElementById('crtOverlay');
     const btn = document.getElementById('btnCrt');
-    const isHidden = overlay.classList.toggle('hidden');
+    if (!overlay || !btn) return false;
+    const isHidden = (typeof forceState === 'boolean') 
+      ? !forceState 
+      : overlay.classList.toggle('hidden');
+    overlay.classList.toggle('hidden', isHidden);
     btn.classList.toggle('active', !isHidden);
-    btn.querySelector('.lbl').textContent = `CRT: ${isHidden ? 'OFF' : 'ON'}`;
-  });
+    const lbl = btn.querySelector('.lbl');
+    if (lbl) lbl.textContent = `CRT: ${isHidden ? 'OFF' : 'ON'}`;
+    try {
+      localStorage.setItem('packrat_crt', isHidden ? '0' : '1');
+    } catch (e) {}
+    return !isHidden;
+  }
+
+  document.getElementById('btnCrt')?.addEventListener('click', () => toggleCrt());
 
   document.getElementById('btnFullscreen')?.addEventListener('click', () => {
     if (!document.fullscreenElement) {
@@ -2199,6 +2216,19 @@
   const scores = getHighScores();
   if (scores.length > 0) highScore = scores[0].score;
   updateSoundButton();
+
+  // CRT Shader: OFF by default unless user explicitly saved ON (1)
+  try {
+    const savedCrt = localStorage.getItem('packrat_crt');
+    if (savedCrt === '1') {
+      toggleCrt(true);
+    } else {
+      toggleCrt(false);
+    }
+  } catch (e) {
+    toggleCrt(false);
+  }
+
   loadLevel(0);
 
   // Expose comprehensive engine API for level select, testing, and debugging
@@ -2209,6 +2239,13 @@
       if (val) sound.unmute(); else sound.mute();
       updateSoundButton();
       return sound.enabled;
+    },
+    // CRT Shader control
+    toggleCrt,
+    setCrtEnabled(val) { return toggleCrt(!!val); },
+    get isCrtEnabled() {
+      const overlay = document.getElementById('crtOverlay');
+      return overlay ? !overlay.classList.contains('hidden') : false;
     },
     // Game lifecycle & state
     GAME_STATE,

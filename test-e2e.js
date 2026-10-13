@@ -28,26 +28,45 @@ const colors = {
 global.window = global;
 global.__MUTE_AUDIO__ = true;
 
+const elementCache = {};
 global.document = {
-  getElementById: (id) => ({
-    id,
-    getContext: () => ({
-      imageSmoothingEnabled: false,
-      createImageData: (w, h) => ({ data: new Uint8Array(w * h * 4) }),
-      putImageData: () => {},
-      drawImage: () => {},
-      fillRect: () => {},
-      fillText: () => {},
-      clearRect: () => {},
-      translate: () => {},
-      scale: () => {}
-    }),
-    addEventListener: () => {},
-    classList: { add: () => {}, remove: () => {}, toggle: () => false, contains: () => false },
-    style: {},
-    querySelector: () => ({ textContent: '', innerText: '' }),
-    querySelectorAll: () => []
-  }),
+  getElementById: (id) => {
+    if (!elementCache[id]) {
+      const classes = new Set(id === 'crtOverlay' ? ['hidden'] : []);
+      elementCache[id] = {
+        id,
+        getContext: () => ({
+          imageSmoothingEnabled: false,
+          createImageData: (w, h) => ({ data: new Uint8Array(w * h * 4) }),
+          putImageData: () => {},
+          drawImage: () => {},
+          fillRect: () => {},
+          fillText: () => {},
+          clearRect: () => {},
+          translate: () => {},
+          scale: () => {}
+        }),
+        addEventListener: () => {},
+        classList: {
+          add: (c) => classes.add(c),
+          remove: (c) => classes.delete(c),
+          toggle: (c, force) => {
+            if (typeof force === 'boolean') {
+              if (force) classes.add(c); else classes.delete(c);
+              return force;
+            }
+            if (classes.has(c)) { classes.delete(c); return false; }
+            classes.add(c); return true;
+          },
+          contains: (c) => classes.has(c)
+        },
+        style: {},
+        querySelector: () => ({ textContent: '', innerText: '' }),
+        querySelectorAll: () => []
+      };
+    }
+    return elementCache[id];
+  },
   querySelectorAll: () => [],
   createElement: (tag) => ({
     tagName: tag.toUpperCase(),

@@ -1028,6 +1028,21 @@
             PACKRAT.toggleMinimap();
             assert.equal(PACKRAT.state, PACKRAT.GAME_STATE.PLAYING, 'Should return to PLAYING');
           }
+        },
+        {
+          name: 'CRT shader is disabled (OFF) by default and can be toggled',
+          fn(PACKRAT, assert) {
+            // Default state must be false (OFF)
+            assert.equal(PACKRAT.isCrtEnabled, false, 'CRT overlay should be disabled by default');
+
+            // Toggle CRT on
+            PACKRAT.setCrtEnabled(true);
+            assert.equal(PACKRAT.isCrtEnabled, true, 'CRT overlay should be enabled after setCrtEnabled(true)');
+
+            // Toggle CRT off again
+            PACKRAT.setCrtEnabled(false);
+            assert.equal(PACKRAT.isCrtEnabled, false, 'CRT overlay should return to disabled (OFF)');
+          }
         }
       ]
     }

@@ -1562,11 +1562,20 @@
     }
   }
 
+  function updateSoundButton() {
+    const btn = document.getElementById('btnSound');
+    if (btn) {
+      const lbl = btn.querySelector('.lbl');
+      if (lbl) lbl.textContent = `SOUND: ${sound.enabled ? 'ON' : 'OFF'}`;
+      const icon = btn.querySelector('.icon');
+      if (icon) icon.textContent = sound.enabled ? '🔊' : '🔇';
+    }
+  }
+
   function toggleSoundSetting() {
     const isEnabled = sound.toggleSound();
-    const btn = document.getElementById('btnSound');
-    btn.querySelector('.lbl').textContent = `SOUND: ${isEnabled ? 'ON' : 'OFF'}`;
-    btn.querySelector('.icon').textContent = isEnabled ? '🔊' : '🔇';
+    updateSoundButton();
+    return isEnabled;
   }
 
   // --- Modal Helpers ---
@@ -1862,15 +1871,68 @@
   preRenderAssets();
   const scores = getHighScores();
   if (scores.length > 0) highScore = scores[0].score;
+  updateSoundButton();
   loadLevel(0);
-  // Expose engine API for level select and debugging
+
+  // Expose comprehensive engine API for level select, testing, and debugging
   window.PACKRAT = {
+    // Sound control
+    sound,
+    setSoundEnabled(val) {
+      if (val) sound.unmute(); else sound.mute();
+      updateSoundButton();
+      return sound.enabled;
+    },
+    // Game lifecycle & state
+    GAME_STATE,
+    get state() { return currentState; },
+    set state(s) { currentState = s; },
+    get score() { return score; },
+    set score(s) { score = s; updateHud(); },
+    get lives() { return lives; },
+    set lives(l) { lives = l; updateHud(); },
+    get highScore() { return highScore; },
+    get currentLevelIdx() { return currentLevelIdx; },
+    get levelData() { return levelData; },
     startGame,
     loadLevel,
+    completeLevel,
+    killPlayer,
+    gameOver,
+    togglePause,
+    toggleMinimap,
+    // Entities & input
     player,
+    camera,
+    keys,
+    get enemies() { return enemies; },
+    set enemies(e) { enemies = e; },
+    get movableBlocks() { return movableBlocks; },
+    get particles() { return particles; },
+    // Tiles & collisions
     getTileAt,
     setTileAt,
-    get movableBlocks() { return movableBlocks; }
+    getDestAt,
+    isTileFloorSolid,
+    isTileWallSolid,
+    isTileCeilingSolid,
+    isTileMovable,
+    isTileHazard,
+    isTileBauble,
+    // Mechanics
+    handleJump,
+    tryPushBlock,
+    dislodgeBlockBelow,
+    addScore,
+    updateHud,
+    // Stepping & physics simulation
+    update,
+    render,
+    step(frames = 1) {
+      for (let i = 0; i < frames; i++) {
+        update();
+      }
+    }
   };
 
   requestAnimationFrame(gameLoop);

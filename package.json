@@ -1,0 +1,20 @@
+{
+  "name": "the-pack-rat",
+  "version": "1.0.0",
+  "description": "Authentic Web & Modern HTML5 Re-creation of The Pack Rat (1992 by Steve Blanding) with complete DOS physics and E2E test suite",
+  "main": "game.js",
+  "scripts": {
+    "test": "node test-e2e.js",
+    "test:cli": "node test-e2e.js",
+    "start": "npx serve ."
+  },
+  "keywords": [
+    "packrat",
+    "dos-game",
+    "retro-gaming",
+    "reverse-engineering",
+    "e2e-testing"
+  ],
+  "author": "Steve Blanding (1992)",
+  "license": "MIT"
+}

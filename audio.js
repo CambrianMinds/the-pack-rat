@@ -4,12 +4,29 @@
 class SoundSystem {
   constructor() {
     this.ctx = null;
-    this.enabled = true;
     this.currentOsc = null;
     this.tickMs = 28; // authentic DOS PIT timer tick (~35 Hz)
+
+    // Check localStorage, window.__MUTE_AUDIO__, or URL parameters
+    let isMuted = false;
+    try {
+      if (typeof window !== 'undefined' && window.__MUTE_AUDIO__) {
+        isMuted = true;
+      } else if (typeof localStorage !== 'undefined' && localStorage.getItem('packrat_sound') === 'off') {
+        isMuted = true;
+      } else if (typeof window !== 'undefined' && window.location && window.location.search) {
+        const search = window.location.search;
+        if (search.includes('mute=1') || search.includes('muted=true') || search.includes('test=1')) {
+          isMuted = true;
+        }
+      }
+    } catch (e) {}
+
+    this.enabled = !isMuted;
   }
 
   init() {
+    if (!this.enabled) return;
     if (!this.ctx) {
       const AudioCtx = window.AudioContext || window.webkitAudioContext;
       if (AudioCtx) {
@@ -21,12 +38,29 @@ class SoundSystem {
     }
   }
 
+  mute() {
+    this.enabled = false;
+    try {
+      if (typeof localStorage !== 'undefined') localStorage.setItem('packrat_sound', 'off');
+    } catch (e) {}
+    this.stop();
+    return false;
+  }
+
+  unmute() {
+    this.enabled = true;
+    try {
+      if (typeof localStorage !== 'undefined') localStorage.setItem('packrat_sound', 'on');
+    } catch (e) {}
+    return true;
+  }
+
   toggleSound() {
-    this.enabled = !this.enabled;
-    if (!this.enabled && this.ctx) {
-      this.stop();
+    if (this.enabled) {
+      return this.mute();
+    } else {
+      return this.unmute();
     }
-    return this.enabled;
   }
 
   stop() {

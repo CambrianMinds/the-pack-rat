@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>The Pack Rat (1992) — E2E Test Suite & Physics Diagnostics</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    .test-dashboard {
+      width: 95vw;
+      max-width: 1100px;
+      margin: 20px auto;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      z-index: 2;
+    }
+    .test-header {
+      background: rgba(22, 25, 34, 0.95);
+      border: 1px solid var(--arcade-border);
+      border-radius: 12px;
+      padding: 20px 24px;
+      box-shadow: 0 12px 36px rgba(0, 0, 0, 0.6);
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .header-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .header-title-box h1 {
+      font-family: var(--font-retro);
+      font-size: 16px;
+      color: var(--neon-gold);
+      letter-spacing: 1px;
+      margin-bottom: 6px;
+      text-shadow: 0 0 10px rgba(255, 208, 40, 0.4);
+    }
+    .header-title-box p {
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+    .mute-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 14px;
+      border-radius: 20px;
+      background: rgba(255, 42, 122, 0.15);
+      border: 1px solid var(--neon-magenta);
+      color: #ff75a6;
+      font-family: var(--font-retro);
+      font-size: 10px;
+      letter-spacing: 0.5px;
+    }
+    .mute-badge.active {
+      background: rgba(0, 229, 255, 0.15);
+      border-color: var(--neon-cyan);
+      color: var(--neon-cyan);
+    }
+    .summary-stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 12px;
+    }
+    .stat-card {
+      background: #0f121a;
+      border: 1px solid #1f2535;
+      border-radius: 8px;
+      padding: 12px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .stat-label {
+      font-size: 11px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      font-weight: 600;
+    }
+    .stat-value {
+      font-family: var(--font-retro);
+      font-size: 16px;
+      color: var(--text-main);
+    }
+    .stat-value.pass { color: var(--neon-green); text-shadow: 0 0 8px rgba(57, 255, 20, 0.4); }
+    .stat-value.fail { color: var(--neon-magenta); text-shadow: 0 0 8px rgba(255, 42, 122, 0.4); }
+    .stat-value.info { color: var(--neon-cyan); }
+
+    .test-actions {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .btn-run {
+      background: linear-gradient(135deg, #00e5ff, #0099b8);
+      color: #040810;
+      border: none;
+      padding: 10px 22px;
+      font-family: var(--font-retro);
+      font-size: 11px;
+      font-weight: bold;
+      border-radius: 6px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.2s;
+    }
+    .btn-run:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 16px rgba(0, 229, 255, 0.4);
+    }
+    .btn-secondary {
+      background: #1b202c;
+      color: var(--text-main);
+      border: 1px solid #2e364a;
+      padding: 10px 18px;
+      font-family: var(--font-modern);
+      font-weight: 600;
+      font-size: 13px;
+      border-radius: 6px;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s;
+    }
+    .btn-secondary:hover {
+      background: #252c3d;
+      border-color: var(--neon-cyan);
+    }
+
+    .progress-bar-container {
+      width: 100%;
+      height: 8px;
+      background: #0f121a;
+      border-radius: 4px;
+      overflow: hidden;
+      border: 1px solid #1f2535;
+    }
+    .progress-bar {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, var(--neon-cyan), var(--neon-green));
+      transition: width 0.3s ease;
+    }
+
+    .suites-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .suite-card {
+      background: rgba(22, 25, 34, 0.9);
+      border: 1px solid var(--arcade-border);
+      border-radius: 8px;
+      overflow: hidden;
+      transition: border-color 0.2s;
+    }
+    .suite-card.pass { border-left: 4px solid var(--neon-green); }
+    .suite-card.fail { border-left: 4px solid var(--neon-magenta); }
+    .suite-card.running { border-left: 4px solid var(--neon-cyan); }
+    .suite-header {
+      padding: 14px 18px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      cursor: pointer;
+      user-select: none;
+      background: rgba(255, 255, 255, 0.01);
+    }
+    .suite-header:hover {
+      background: rgba(255, 255, 255, 0.03);
+    }
+    .suite-title-area {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .suite-title {
+      font-weight: 700;
+      font-size: 15px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .suite-desc {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+    .suite-badge {
+      font-family: var(--font-retro);
+      font-size: 9px;
+      padding: 4px 10px;
+      border-radius: 4px;
+      letter-spacing: 0.5px;
+    }
+    .suite-badge.pass { background: rgba(57, 255, 20, 0.15); color: var(--neon-green); border: 1px solid rgba(57, 255, 20, 0.4); }
+    .suite-badge.fail { background: rgba(255, 42, 122, 0.15); color: var(--neon-magenta); border: 1px solid rgba(255, 42, 122, 0.4); }
+    .suite-badge.running { background: rgba(0, 229, 255, 0.15); color: var(--neon-cyan); border: 1px solid rgba(0, 229, 255, 0.4); }
+    .suite-tests-list {
+      padding: 0 18px 14px 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      border-top: 1px solid #1a1e2b;
+      margin-top: 6px;
+    }
+    .test-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 6px 10px;
+      border-radius: 4px;
+      background: #0d1017;
+      font-size: 12px;
+    }
+    .test-row.fail {
+      background: rgba(255, 42, 122, 0.1);
+      border: 1px solid rgba(255, 42, 122, 0.3);
+    }
+    .test-name {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--text-main);
+    }
+    .test-time {
+      font-family: monospace;
+      color: var(--text-muted);
+      font-size: 11px;
+    }
+    .test-err {
+      color: #ff528c;
+      font-family: monospace;
+      font-size: 11px;
+      margin-top: 4px;
+      padding-left: 24px;
+    }
+
+    .log-box {
+      background: #06080d;
+      border: 1px solid #161b26;
+      border-radius: 8px;
+      padding: 14px 16px;
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 11px;
+      line-height: 1.5;
+      color: #8fa0c0;
+      max-height: 220px;
+      overflow-y: auto;
+    }
+    .log-entry { margin-bottom: 2px; }
+    .log-entry.pass { color: #5af770; }
+    .log-entry.fail { color: #ff528c; font-weight: bold; }
+    .log-entry.info { color: #54c9ff; }
+
+    /* Hidden simulator canvas to satisfy game engine rendering */
+    #hiddenEngineContainer {
+      position: absolute;
+      left: -9999px;
+      top: -9999px;
+      visibility: hidden;
+      pointer-events: none;
+    }
+  </style>
+
+  <!-- STRICT SAFETY: Pre-mute all sound before any script runs -->
+  <script>
+    window.__MUTE_AUDIO__ = true;
+    try {
+      localStorage.setItem('packrat_sound', 'off');
+    } catch (e) {}
+  </script>
+</head>
+<body>
+  <div id="hiddenEngineContainer">
+    <canvas id="gameCanvas" width="320" height="200"></canvas>
+    <div id="hudBar"><span id="hudScore"></span><span id="hudHigh"></span><span id="hudLevel"></span><span id="hudLives"></span></div>
+    <button id="btnSound"><span class="icon">🔇</span><span class="lbl">SOUND: OFF</span></button>
+  </div>
+
+  <div class="test-dashboard">
+    <div class="test-header">
+      <div class="header-top">
+        <div class="header-title-box">
+          <h1>THE PACK RAT (1992) — E2E TEST SUITE</h1>
+          <p>Physics Engine, Reverse-Engineered Mechanics & Boundary Verification</p>
+        </div>
+        <div class="mute-badge" id="muteIndicator">
+          <span>🔇</span>
+          <span>AUDIO MUTED (SILENT MODE)</span>
+        </div>
+      </div>
+
+      <div class="summary-stats">
+        <div class="stat-card">
+          <span class="stat-label">Suites Passing</span>
+          <span class="stat-value pass" id="statSuites">-- / --</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">Tests Passed</span>
+          <span class="stat-value pass" id="statTests">-- / --</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">Total Assertions</span>
+          <span class="stat-value info" id="statAssertions">--</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">Execution Time</span>
+          <span class="stat-value" id="statDuration">-- ms</span>
+        </div>
+      </div>
+
+      <div class="progress-bar-container">
+        <div class="progress-bar" id="progressBar"></div>
+      </div>
+
+      <div class="test-actions">
+        <button class="btn-run" id="btnRunTests">
+          <span>▶</span>
+          <span>RUN ALL TESTS</span>
+        </button>
+        <a href="index.html" class="btn-secondary">
+          <span>🎮</span>
+          <span>PLAY FULL GAME</span>
+        </a>
+      </div>
+    </div>
+
+    <!-- Suites Container -->
+    <div class="suites-grid" id="suitesGrid">
+      <!-- Dynamic suite cards injected here -->
+    </div>
+
+    <!-- Live Execution Logs -->
+    <div class="test-header" style="padding: 16px 20px;">
+      <h3 style="font-family: var(--font-retro); font-size: 12px; color: var(--neon-cyan); margin-bottom: 10px;">
+        CONSOLE OUTPUT
+      </h3>
+      <div class="log-box" id="logBox">
+        <div class="log-entry info">[INIT] Diagnostic Test Harness ready. Sound muted.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Load dependencies in exact order -->
+  <script src="assets.js"></script>
+  <script src="audio.js"></script>
+  <script src="game.js"></script>
+  <script src="tests-core.js"></script>
+
+  <script>
+    // Double-verify silence immediately
+    if (window.PACKRAT && window.PACKRAT.setSoundEnabled) {
+      window.PACKRAT.setSoundEnabled(false);
+    }
+
+    const logBox = document.getElementById('logBox');
+    function log(msg, type = 'info') {
+      const el = document.createElement('div');
+      el.className = `log-entry ${type}`;
+      el.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+      logBox.appendChild(el);
+      logBox.scrollTop = logBox.scrollHeight;
+    }
+
+    function renderInitialSuites() {
+      const grid = document.getElementById('suitesGrid');
+      grid.innerHTML = '';
+
+      window.PackRatTestSuite.suites.forEach((suite, sIdx) => {
+        const card = document.createElement('div');
+        card.id = `card_${suite.id}`;
+        card.className = 'suite-card';
+        card.innerHTML = `
+          <div class="suite-header" onclick="toggleSuiteDetails('${suite.id}')">
+            <div class="suite-title-area">
+              <div class="suite-title">
+                <span class="suite-icon" id="icon_${suite.id}">⚪</span>
+                <span>${suite.name}</span>
+              </div>
+              <div class="suite-desc">${suite.description}</div>
+            </div>
+            <span class="suite-badge" id="badge_${suite.id}">${suite.tests.length} TESTS</span>
+          </div>
+          <div class="suite-tests-list" id="tests_${suite.id}">
+            ${suite.tests.map(t => `
+              <div class="test-row">
+                <span class="test-name"><span>•</span> ${t.name}</span>
+                <span class="test-time">pending</span>
+              </div>
+            `).join('')}
+          </div>
+        `;
+        grid.appendChild(card);
+      });
+    }
+
+    window.toggleSuiteDetails = function(suiteId) {
+      const el = document.getElementById(`tests_${suiteId}`);
+      if (el) {
+        el.style.display = el.style.display === 'none' ? 'flex' : 'none';
+      }
+    };
+
+    async function executeTests() {
+      // Force sound muted
+      if (window.PACKRAT) window.PACKRAT.setSoundEnabled(false);
+
+      log('Starting full automated test suite execution...', 'info');
+      const progressBar = document.getElementById('progressBar');
+      progressBar.style.width = '0%';
+
+      let completedTests = 0;
+      const totalTests = window.PackRatTestSuite.suites.reduce((sum, s) => sum + s.tests.length, 0);
+
+      const report = await window.PackRatTestSuite.runAllTests(window.PACKRAT, (suite, test, result) => {
+        completedTests++;
+        const pct = Math.round((completedTests / totalTests) * 100);
+        progressBar.style.width = `${pct}%`;
+
+        if (result.passed) {
+          log(`✔ PASS: ${test.name} (${result.durationMs}ms)`, 'pass');
+        } else {
+          log(`✖ FAIL: ${test.name} — ${result.error}`, 'fail');
+        }
+      });
+
+      // Update Dashboard
+      document.getElementById('statSuites').textContent = `${report.passedSuites} / ${report.totalSuites}`;
+      document.getElementById('statSuites').className = `stat-value ${report.passedSuites === report.totalSuites ? 'pass' : 'fail'}`;
+
+      document.getElementById('statTests').textContent = `${report.passedTests} / ${report.totalTests}`;
+      document.getElementById('statTests').className = `stat-value ${report.passedTests === report.totalTests ? 'pass' : 'fail'}`;
+
+      document.getElementById('statAssertions').textContent = report.assertions;
+      document.getElementById('statDuration').textContent = `${report.durationMs} ms`;
+
+      // Update Cards
+      report.suiteReports.forEach(sr => {
+        const card = document.getElementById(`card_${sr.id}`);
+        const badge = document.getElementById(`badge_${sr.id}`);
+        const icon = document.getElementById(`icon_${sr.id}`);
+        const list = document.getElementById(`tests_${sr.id}`);
+
+        if (sr.failed === 0) {
+          card.className = 'suite-card pass';
+          badge.className = 'suite-badge pass';
+          badge.textContent = `ALL ${sr.total} PASSED`;
+          icon.textContent = '🟢';
+        } else {
+          card.className = 'suite-card fail';
+          badge.className = 'suite-badge fail';
+          badge.textContent = `${sr.failed} FAILED`;
+          icon.textContent = '🔴';
+        }
+
+        list.innerHTML = sr.tests.map(t => `
+          <div class="test-row ${t.passed ? '' : 'fail'}">
+            <div style="display: flex; flex-direction: column;">
+              <span class="test-name">
+                <span>${t.passed ? '✔' : '✖'}</span>
+                ${t.name}
+              </span>
+              ${t.error ? `<span class="test-err">${t.error}</span>` : ''}
+            </div>
+            <span class="test-time">${t.durationMs}ms</span>
+          </div>
+        `).join('');
+      });
+
+      log(`Suite completed in ${report.durationMs}ms. ${report.passedTests}/${report.totalTests} tests passed.`, report.failedTests === 0 ? 'pass' : 'fail');
+    }
+
+    document.getElementById('btnRunTests').addEventListener('click', executeTests);
+
+    // Initial render and immediate autorun
+    renderInitialSuites();
+    executeTests();
+  </script>
+</body>
+</html>

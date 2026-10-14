@@ -10,7 +10,7 @@
 > Reverse-engineered from original 16-bit real-mode binaries (`PACKRAT.EXE` & `PACKRAT.001`) into modern HTML5 Canvas, Web Audio, and Vanilla JavaScript. Runs instantly in any desktop or mobile browser with zero build steps or runtime dependencies.
 
 <p align="center">
-  <img src="preview.png" alt="The Pack Rat (1992) Gameplay Preview" width="750">
+  <img src="images/preview.png" alt="The Pack Rat (1992) Gameplay Preview" width="750">
 </p>
 
 ---
@@ -162,27 +162,34 @@ The original level data is stored in `PACKRAT.001` using a custom 10th-order ada
 ### 3. Repository Architecture
 ```text
 the-pack-rat/
-├── index.html         # Main game presentation, arcade bezel, HUD, and modal dialogs
+├── index.html         # Main web game entry point & arcade interface
 ├── game.js            # Core engine: DOS physics, collision loop, state machine, level editor
-├── assets.js          # Extracted levels (0-15), tile graphics, sprite frames, and palette
+├── assets.js          # Extracted levels (0-15), 61 tile graphics, sprite frames, and palette
 ├── audio.js           # Authentic Web Audio API PC speaker frequency synthesizer
 ├── style.css          # CRT styling, arcade marquee, responsive mobile controls & layout
-├── extract.py         # Binary arithmetic decompressor & asset extraction script
-├── test-e2e.js        # Automated CLI test runner (Node.js) with silent sound mode
-├── tests-core.js      # Core test specifications (49 E2E physics & mechanics tests)
-├── test.html          # In-browser test runner with visual PASS/FAIL report
-├── PACKRAT.EXE        # Original 1992 MS-DOS 16-bit executable (preserved)
-├── PACKRAT.001        # Original compressed level archive (preserved)
-├── PACKRAT.TXT        # Original 1992 game manual & documentation
-├── REGISTER.FRM       # Original 1992 shareware mail-in registration form
-└── package.json       # Project metadata and test scripts
+├── package.json       # Project metadata and test scripts
+├── README.md          # Comprehensive project documentation
+├── LICENSE            # MIT License
+├── docs/              # Guides, walkthroughs, and documentation
+│   ├── walkthrough.html   # Interactive visual walkthrough & secret guide
+│   ├── cheat_guide.pdf    # Printable 5-page PDF cheat guide & stage directory
+│   ├── cheat_guide.tex    # LaTeX master source with side-by-side secret cards
+│   └── *.png              # Progression maps and annotated level secret cards
+├── tests/             # Automated test suite (51 E2E tests)
+│   ├── test-e2e.js        # Automated Node.js CLI test runner
+│   ├── tests-core.js      # Core test specifications (physics, collisions, hazards)
+│   └── test.html          # In-browser diagnostic test runner
+├── images/            # Background art and social preview cards
+├── scripts/           # Python extraction, disassembly, and map rendering tools
+├── original-source/   # Original 1992 MS-DOS binaries (PACKRAT.EXE, PACKRAT.DAT)
+└── tiles/             # Dumped raw 16x16 and 32x32 tiles & sprite frames
 ```
 
 ---
 
 ## 🧪 Automated Test Suite
 
-A comprehensive test suite of **49 end-to-end tests** validates the game engine against DOS behavior:
+A comprehensive test suite of **51 end-to-end tests** validates the game engine against DOS behavior:
 
 - **Collision & Map Bounds:** Floor detection, pit death boundaries, void falloff, horizontal borders.
 - **DOS Physics:** Jump velocity, gravity acceleration, variable height impulse, ceiling collision, ice friction.
@@ -194,11 +201,11 @@ A comprehensive test suite of **49 end-to-end tests** validates the game engine 
 ```bash
 npm test
 # or
-node test-e2e.js
+node tests/test-e2e.js
 ```
 
 ### Running Browser Tests
-Simply open [`test.html`](test.html) in any modern browser to view the interactive test suite with detailed assertion reports.
+Simply open [`tests/test.html`](tests/test.html) in any modern browser to view the interactive test suite with detailed assertion reports.
 
 ---
 

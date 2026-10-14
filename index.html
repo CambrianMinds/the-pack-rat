@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <!-- Primary Meta Tags -->
   <title>The Pack Rat (1992) — Authentic Web Edition</title>
   <meta name="title" content="The Pack Rat (1992) — Authentic Web Edition">
@@ -14,7 +14,7 @@
   <meta property="og:url" content="https://cambrianminds.github.io/the-pack-rat/">
   <meta property="og:title" content="The Pack Rat (1992) — Authentic Web Edition">
   <meta property="og:description" content="A pixel-perfect, reverse-engineered web preservation of Steve Blanding's classic 1992 256-color MS-DOS platformer The Pack Rat. Play directly in your browser without installation.">
-  <meta property="og:image" content="https://cambrianminds.github.io/the-pack-rat/preview.png">
+  <meta property="og:image" content="https://cambrianminds.github.io/the-pack-rat/images/preview.png">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
   <meta property="og:image:alt" content="The Pack Rat (1992) authentic gameplay preview showing Level 0 platforms, water hazards, and collectibles">
@@ -24,7 +24,7 @@
   <meta name="twitter:url" content="https://cambrianminds.github.io/the-pack-rat/">
   <meta name="twitter:title" content="The Pack Rat (1992) — Authentic Web Edition">
   <meta name="twitter:description" content="A pixel-perfect, reverse-engineered web preservation of Steve Blanding's classic 1992 256-color MS-DOS platformer The Pack Rat. Play directly in your browser without installation.">
-  <meta name="twitter:image" content="https://cambrianminds.github.io/the-pack-rat/preview.png">
+  <meta name="twitter:image" content="https://cambrianminds.github.io/the-pack-rat/images/preview.png">
   <meta name="twitter:image:alt" content="The Pack Rat (1992) authentic gameplay preview showing Level 0 platforms, water hazards, and collectibles">
 
   <link rel="stylesheet" href="style.css">
@@ -54,6 +54,9 @@
         </button>
         <button id="btnZoom" class="btn-icon" title="Minimap / Zoom View (Z)">
           <span class="icon">🗺️</span> <span class="lbl">ZOOM</span>
+        </button>
+        <button id="btnGodMode" class="btn-icon" title="Toggle Invincible & Unlimited Lives Cheat (I)">
+          <span class="icon">🛡️</span> <span class="lbl">GOD: OFF</span>
         </button>
         <button id="btnFullscreen" class="btn-icon" title="Toggle Fullscreen">
           <span class="icon">⛶</span>
@@ -98,6 +101,7 @@
       <button id="btnEditor" class="btn-action cyan">🛠 LEVEL EDITOR</button>
       <button id="btnScores" class="btn-action">🏆 HIGH SCORES</button>
       <button id="btnHelp" class="btn-action">❓ HOW TO PLAY (F1)</button>
+      <a href="docs/walkthrough.html" target="_blank" class="btn-action gold">📖 CHEAT GUIDE</a>
       <button id="btnAbout" class="btn-action">ℹ ABOUT & ARCHIVE</button>
     </nav>
 
@@ -170,6 +174,7 @@
           <li><kbd>↑</kbd> or <kbd>W</kbd> : Look Up (scroll camera view up)</li>
           <li><kbd>↓</kbd> or <kbd>S</kbd> : Look Down & Dislodge fragile blocks beneath you</li>
           <li><kbd>M</kbd> or <kbd>Z</kbd> : Full Level Zoom / Minimap mode</li>
+          <li><kbd>I</kbd> : Toggle Invincible & Unlimited Lives (Testing Cheat Mode)</li>
           <li><kbd>K</kbd> : Kill Pack Rat (if trapped)</li>
           <li><kbd>F1</kbd> : Help Menu | <kbd>F2</kbd> : Sound On/Off | <kbd>F3</kbd> or <kbd>Esc</kbd> : Pause</li>
           <li><kbd>F10</kbd> : Toggle Score HUD</li>
@@ -191,9 +196,9 @@
         <button class="modal-close" data-close>&times;</button>
       </div>
       <div class="modal-body">
-        <div id="highScoresList" style="font-family: var(--font-retro); font-size: 12px; line-height: 2;"></div>
-        <div style="margin-top: 20px; text-align: center;">
-          <button id="btnResetScores" class="btn-action" style="font-size: 11px;">Reset High Scores</button>
+        <div id="highScoresList" class="high-scores-list"></div>
+        <div class="modal-actions-center">
+          <button id="btnResetScores" class="btn-action btn-sm">Reset High Scores</button>
         </div>
       </div>
     </div>
@@ -209,9 +214,9 @@
       <div class="modal-body">
         <p>Click any action to rebind its primary key. Press any key on your keyboard to assign it:</p>
         <div id="controlsBindingList" class="controls-list"></div>
-        <div style="margin-top: 20px; display: flex; justify-content: space-between; align-items: center;">
-          <button id="btnResetControls" class="btn-action" style="font-size: 11px;">↺ Reset to Defaults</button>
-          <button class="btn-action primary" data-close style="font-size: 11px;">Done</button>
+        <div class="modal-actions-split">
+          <button id="btnResetControls" class="btn-action btn-sm">↺ Reset to Defaults</button>
+          <button class="btn-action primary btn-sm" data-close>Done</button>
         </div>
       </div>
     </div>
@@ -219,7 +224,7 @@
 
   <!-- MODAL: LEVEL EDITOR -->
   <div class="modal-overlay" id="modalEditor">
-    <div class="modal-card" style="max-width: 880px;">
+    <div class="modal-card modal-card-lg">
       <div class="modal-header">
         <h2 class="modal-title">BUILT-IN LEVEL EDITOR</h2>
         <button class="modal-close" data-close>&times;</button>
@@ -227,16 +232,16 @@
       <div class="modal-body">
         <div class="editor-container">
           <div class="editor-toolbar">
-            <label style="font-size: 12px; font-weight: bold;">Tile: <span id="editorCurrentTileName">Brick</span></label>
-            <label style="font-size: 12px; font-weight: bold; margin-left: 10px;">BG Color: <input type="number" id="editorBgColor" min="0" max="255" value="3" style="width: 50px; padding: 2px 4px; background: #222; color: #fff; border: 1px solid #444; border-radius: 4px;"></label>
-            <label style="font-size: 12px; font-weight: bold; margin-left: 10px;">Hole Warp Level: <input type="number" id="editorHoleDest" min="0" max="99" value="1" style="width: 50px; padding: 2px 4px; background: #222; color: #fff; border: 1px solid #444; border-radius: 4px;"></label>
-            <button id="btnEditorTest" class="btn-action primary" style="padding: 4px 10px; font-size: 12px; margin-left: auto;">▶ TEST LEVEL</button>
-            <button id="btnEditorExport" class="btn-action" style="padding: 4px 10px; font-size: 12px;">💾 EXPORT</button>
-            <button id="btnEditorImport" class="btn-action" style="padding: 4px 10px; font-size: 12px;">📂 IMPORT</button>
-            <button id="btnEditorClear" class="btn-action" style="padding: 4px 10px; font-size: 12px;">🗑 CLEAR</button>
+            <label class="editor-label">Tile: <span id="editorCurrentTileName">Brick</span></label>
+            <label class="editor-label">BG Color: <input type="number" id="editorBgColor" class="editor-num-input" min="0" max="255" value="3"></label>
+            <label class="editor-label">Hole Warp Level: <input type="number" id="editorHoleDest" class="editor-num-input" min="0" max="99" value="1"></label>
+            <button id="btnEditorTest" class="btn-action primary btn-editor btn-editor-test">▶ TEST LEVEL</button>
+            <button id="btnEditorExport" class="btn-action btn-editor">💾 EXPORT</button>
+            <button id="btnEditorImport" class="btn-action btn-editor">📂 IMPORT</button>
+            <button id="btnEditorClear" class="btn-action btn-editor">🗑 CLEAR</button>
           </div>
           <div class="editor-tile-palette" id="editorPalette"></div>
-          <p style="font-size: 11px; color: var(--text-muted);">Click on tiles to select. Draw directly onto the level canvas or switch back to game view to playtest!</p>
+          <p class="editor-help-text">Click on tiles to select. Draw directly onto the level canvas or switch back to game view to playtest!</p>
         </div>
       </div>
     </div>
@@ -251,7 +256,7 @@
       </div>
       <div class="modal-body">
         <h3>CONVERSION & PRESERVATION</h3>
-        <p style="color: var(--neon-cyan); font-weight: bold;">Converted from the original .exe by Justin Bogner, October 2026.</p>
+        <p class="preservation-byline">Converted from the original .exe by Justin Bogner, October 2026.</p>
         <p>This web edition reverse-engineers and preserves the 1992 MS-DOS release with 100% authentic extracted binary data (sprites, palettes, sound synthesis, and arithmetic-compressed levels).</p>
 
         <h3>ORIGINAL 1992 SHAREWARE AUTHOR</h3>

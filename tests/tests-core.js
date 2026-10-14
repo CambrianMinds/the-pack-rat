@@ -855,6 +855,42 @@
             PACKRAT.killPlayer(4, true); // force = true
             assert.equal(PACKRAT.lives, 2, 'Forced suicide must deduct life even during invulnerability');
           }
+        },
+        {
+          name: 'Authentic electric spark frames (Entries 60 & 61) are loaded and available',
+          fn(PACKRAT, assert) {
+            assert.ok(PACKRAT.sparkBitmaps && PACKRAT.sparkBitmaps.length >= 2, 'Spark bitmaps must have at least 2 frames');
+            assert.equal(PACKRAT.sparkBitmaps[0].width, 16, 'Spark frame 1 width must be 16px');
+            assert.equal(PACKRAT.sparkBitmaps[0].height, 16, 'Spark frame 1 height must be 16px');
+            assert.equal(PACKRAT.sparkBitmaps[1].width, 16, 'Spark frame 2 width must be 16px');
+            assert.equal(PACKRAT.sparkBitmaps[1].height, 16, 'Spark frame 2 height must be 16px');
+          }
+        },
+        {
+          name: 'God Mode grants invincibility against hazards, electricity, and traps with unlimited lives',
+          fn(PACKRAT, assert) {
+            PACKRAT.loadLevel(0);
+            PACKRAT.state = PACKRAT.GAME_STATE.PLAYING;
+            PACKRAT.godMode = true;
+            assert.equal(PACKRAT.godMode, true, 'God Mode should be active');
+            assert.equal(PACKRAT.lives, 99, 'God Mode sets lives to 99');
+
+            // 1. Hazard immunity (Tile 2)
+            PACKRAT.setTileAt(10, 50, 2);
+            PACKRAT.player.x = 10 * 16 + 2;
+            PACKRAT.player.y = 50 * 16 - 10;
+            PACKRAT.step(1);
+            assert.equal(PACKRAT.lives, 99, 'Hazard must not deduct lives in God Mode');
+
+            // 2. Electric Wire immunity (Tile 18)
+            PACKRAT.setTileAt(10, 50, 18);
+            PACKRAT.step(1);
+            assert.equal(PACKRAT.lives, 99, 'Electric wire must not deduct lives in God Mode');
+
+            // Reset God Mode for other tests
+            PACKRAT.godMode = false;
+            PACKRAT.lives = 3;
+          }
         }
       ]
     },

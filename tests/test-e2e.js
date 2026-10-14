@@ -98,10 +98,10 @@ global.addEventListener = () => {};
 global.navigator = { getGamepads: () => [] };
 
 // 2. Load Game Modules
-require('./assets.js');
-require('./audio.js');
-require('./game.js');
-const { runAllTests } = require('./tests-core.js');
+require(path.join(__dirname, '../assets.js'));
+require(path.join(__dirname, '../audio.js'));
+require(path.join(__dirname, '../game.js'));
+const { runAllTests } = require(path.join(__dirname, 'tests-core.js'));
 
 async function main() {
   console.log(`\n${colors.cyan}${colors.bold}========================================================================${colors.reset}`);

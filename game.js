@@ -19,11 +19,21 @@
 
   // Pre-rendered sprite and tile caches
   const tileBitmaps = {};
+  const sparkBitmaps = [];
   const ratBitmaps = {
     right: { idle: null, jump: null, walk: [] },
     left: { idle: null, jump: null, walk: [] }
   };
   const enemyBitmaps = { left: [], right: [] };
+  let godMode = false; // Invincible + Unlimited Lives testing cheat mode
+
+  // Angel Death Ascension Animation State (PACKRAT.EXE 0x347F & Master Table Entry 54)
+  const angelDeath = {
+    active: false,
+    x: 0,
+    y: 0,
+    timer: 0
+  };
 
   // --- Pre-render Assets ---
   function preRenderAssets() {
@@ -70,46 +80,50 @@
       return fc;
     }
 
-    // Pre-render tiles (authentic 16x16 map tiles are 1..35)
+    // Pre-render tiles (all authentic map tiles and sprites up to 61)
     for (const [idStr, tile] of Object.entries(assets.tiles)) {
       const id = parseInt(idStr, 10);
-      if (id <= 35) {
-        tileBitmaps[id] = createTileCanvas(tile.w, tile.h, tile.pixels);
+      tileBitmaps[id] = createTileCanvas(tile.w, tile.h, tile.pixels);
+    }
+
+    // Pre-render authentic electric sparks (Entries 60 & 61 at DS:0xB356 & DS:0xB45A)
+    sparkBitmaps.length = 0;
+    if (assets.sparkFrames && assets.sparkFrames.length > 0) {
+      for (let i = 0; i < assets.sparkFrames.length; i++) {
+        const sf = assets.sparkFrames[i];
+        sparkBitmaps.push(createTileCanvas(sf.w, sf.h, sf.pixels));
       }
+    } else {
+      if (tileBitmaps[60]) sparkBitmaps.push(tileBitmaps[60]);
+      if (tileBitmaps[61]) sparkBitmaps.push(tileBitmaps[61]);
     }
 
-    // Pre-render raw rat animation frames
-    // In PACKRAT.EXE:
-    // Frames 0..6 are left-facing (0=idle, 1..6=walk)
-    // Frames 7..14 are right-facing (9=idle, 7,8,10..14=walk)
-    // Frame 15 is left-facing jump, Frame 16 is right-facing jump
-    const rawRat = [];
-    for (let i = 0; i < assets.ratFrames.length; i++) {
-      const rf = assets.ratFrames[i];
-      rawRat.push(createTileCanvas(rf.w, rf.h, rf.pixels));
-    }
-
-    // Right-facing set
+    // Pre-render authentic rat animation frames from master table entries:
+    // Right-facing: Entries 36..43 (Walk/Idle), Entry 52 (Jump)
+    // Left-facing: Entries 44..51 (Walk/Idle), Entry 53 (Jump)
+    // Angel Rat: Entry 54 (24x32 with golden halo & flapping wings)
     ratBitmaps.right = {
-      idle: rawRat[9] || (rawRat[0] ? createFlippedCanvas(rawRat[0]) : null),
-      jump: rawRat[16] || (rawRat[15] ? createFlippedCanvas(rawRat[15]) : null),
-      walk: [rawRat[9], rawRat[7], rawRat[8], rawRat[10], rawRat[11], rawRat[12], rawRat[13], rawRat[14]].filter(Boolean)
+      idle: tileBitmaps[36] || null,
+      jump: tileBitmaps[52] || tileBitmaps[36] || null,
+      walk: [36, 37, 38, 39, 40, 41, 42, 43].map(id => tileBitmaps[id]).filter(Boolean)
     };
 
-    // Left-facing set
     ratBitmaps.left = {
-      idle: rawRat[0] || (rawRat[9] ? createFlippedCanvas(rawRat[9]) : null),
-      jump: rawRat[15] || (rawRat[16] ? createFlippedCanvas(rawRat[16]) : null),
-      walk: [rawRat[0], rawRat[1], rawRat[2], rawRat[3], rawRat[4], rawRat[5], rawRat[6]].filter(Boolean)
+      idle: tileBitmaps[44] || null,
+      jump: tileBitmaps[53] || tileBitmaps[44] || null,
+      walk: [44, 45, 46, 47, 48, 49, 50, 51].map(id => tileBitmaps[id]).filter(Boolean)
     };
 
-    // Pre-render enemy rat animation frames (naturally left-facing)
+    // Pre-render enemy rat animation frames from PACKRAT.EXE (Entries 56..59):
+    // Frames 0 and 1 (DS:0xA380, 0xA564) are naturally left-facing walk frames (snout at x=0..6)
+    // Frames 2 and 3 (DS:0xA748, 0xA92C) are naturally right-facing walk frames (snout at x=23..29)
+    const rawEnemy = [];
     for (let i = 0; i < assets.enemyFrames.length; i++) {
       const ef = assets.enemyFrames[i];
-      const eCanvas = createTileCanvas(ef.w, ef.h, ef.pixels);
-      enemyBitmaps.left.push(eCanvas);
-      enemyBitmaps.right.push(createFlippedCanvas(eCanvas));
+      rawEnemy.push(createTileCanvas(ef.w, ef.h, ef.pixels));
     }
+    enemyBitmaps.left = [rawEnemy[0], rawEnemy[1]].filter(Boolean);
+    enemyBitmaps.right = [rawEnemy[2], rawEnemy[3]].filter(Boolean);
   }
 
   // --- High Scores Storage ---
@@ -252,7 +266,11 @@
         buildTreeOverlay();
       }
     };
-    houseImg.src = 'house.jpg';
+    houseImg.onerror = () => {
+      if (houseImg.src.indexOf('images/') === -1) return;
+      houseImg.src = 'house.jpg';
+    };
+    houseImg.src = 'images/house.jpg';
   }
 
   if (treeOverlayImg) {
@@ -260,7 +278,11 @@
       treeOverlayLoaded = true;
       treeOverlayCanvas = treeOverlayImg;
     };
-    treeOverlayImg.src = 'tree_overlay.png';
+    treeOverlayImg.onerror = () => {
+      if (treeOverlayImg.src.indexOf('images/') === -1) return;
+      treeOverlayImg.src = 'tree_overlay.png';
+    };
+    treeOverlayImg.src = 'images/tree_overlay.png';
   }
   let titleRatX = 30;
   let titleRatDir = 1;
@@ -319,7 +341,7 @@
       this.animTimer++;
       if (this.animTimer > 5) {
         this.animTimer = 0;
-        this.animFrame = (this.animFrame + 1) % 4;
+        this.animFrame = (this.animFrame + 1) % 2;
       }
     }
 
@@ -651,6 +673,12 @@
           e.preventDefault();
         }
         break;
+      case 'KeyI':
+        if (!e.ctrlKey && !e.altKey && !e.metaKey && document.activeElement?.tagName !== 'INPUT') {
+          toggleGodMode();
+          e.preventDefault();
+        }
+        break;
       case 'F10':
         showHud = !showHud;
         document.getElementById('hudBar').style.display = showHud ? 'flex' : 'none';
@@ -836,8 +864,8 @@
 
   function isTileHazard(id) {
     if (id >= 36) return false; // Illusionary decoy tiles are non-lethal
-    // Tile 2: Mousetrap, Tile 11..14: Water, Tile 18: Electric Wire, Tile 19: Sparked Wire
-    return id === 2 || (id >= 11 && id <= 14) || id === 18 || id === 19;
+    // Tile 2..9: Water (Lethal drowning), Tile 11..14: Enemy Rat Lairs (Lethal), Tile 18..19: Electric Wire
+    return (id >= 2 && id <= 9) || (id >= 11 && id <= 14) || id === 18 || id === 19;
   }
 
   function isTileBauble(id) {
@@ -852,7 +880,7 @@
     constructor(points, isLoop = false, initialProgress = 0) {
       this.points = points;
       this.isLoop = isLoop;
-      this.speed = 1.6;
+      this.speed = 0.35; // Authentic DOS traversal speed (calibrated from PACKRAT.EXE 0x3698 INT 1C timer at 18.2 Hz)
       this.dir = 1;
       this.progress = initialProgress;
       this.x = points[0] ? points[0].x : 0;
@@ -917,8 +945,8 @@
         addSparkles(this.x, this.y, '#00e5ff', 1);
       }
 
-      // Check collision with player (lethal electrocution hazard)
-      if (currentState === GAME_STATE.PLAYING && player.invulnerableTimer <= 0) {
+      // Check collision with player (lethal electrocution hazard, ignored in God Mode)
+      if (!godMode && currentState === GAME_STATE.PLAYING && player.invulnerableTimer <= 0) {
         const px = player.x + player.w / 2;
         const py = player.y + player.h / 2;
         const dx = Math.abs(this.x - px);
@@ -939,10 +967,11 @@
 
       if (sx < -32 || sx > VIRTUAL_W + 32 || sy < -32 || sy > VIRTUAL_H + 32) return;
 
-      // Authentic electrical spark sprite from PACKRAT.EXE (Tile 18/19)
-      const sparkSprite = (Math.floor(gameTicks / 4) % 2 === 0) ? tileBitmaps[18] : tileBitmaps[19];
+      // Authentic electrical spark sprites from PACKRAT.EXE (Entries 60 & 61 at DS:0xB356 & DS:0xB45A)
+      const sparkIdx = Math.floor(gameTicks / 4) % 2;
+      const sparkSprite = sparkBitmaps[sparkIdx] || tileBitmaps[60 + sparkIdx];
       if (sparkSprite) {
-        ctx.drawImage(sparkSprite, Math.floor(sx - 16), Math.floor(sy - 4));
+        ctx.drawImage(sparkSprite, Math.floor(sx - 8), Math.floor(sy - 8));
       }
 
       // Dynamic electrical corona & crackle lightning arc
@@ -1043,6 +1072,7 @@
     levelBgColor = `rgb(${bgRgb[0]}, ${bgRgb[1]}, ${bgRgb[2]})`;
 
     // Spawn player at start coordinates
+    angelDeath.active = false;
     player.reset(levelData.startX, levelData.startY);
 
     // Initialize Movable Blocks, Enemies, and Electric Currents
@@ -1084,16 +1114,58 @@
     updateHud();
   }
 
-  function updateHud() {
-    document.getElementById('hudScore').textContent = String(score).padStart(6, '0');
-    document.getElementById('hudHigh').textContent = String(highScore).padStart(6, '0');
-    document.getElementById('hudLevel').textContent = String(currentLevelIdx + 1);
-    
-    let lifeIcons = '';
-    for (let i = 0; i < lives; i++) {
-      lifeIcons += '🐀 ';
+  function toggleGodMode() {
+    godMode = !godMode;
+    if (godMode) {
+      lives = 99;
+      sound.play(2); // Fanfare
+      addSparkles(player.x + player.w / 2, player.y + player.h / 2, '#ffd700', 35);
+    } else {
+      lives = 3;
+      sound.play(1);
     }
-    document.getElementById('hudLives').textContent = lifeIcons || '💀';
+    updateHud();
+    updateGodModeButton();
+    return godMode;
+  }
+
+  function updateGodModeButton() {
+    const btn = document.getElementById('btnGodMode');
+    if (!btn) return;
+    if (godMode) {
+      btn.classList.add('active', 'god-active');
+      btn.style.borderColor = '#ffd700';
+      btn.style.boxShadow = '0 0 12px rgba(255, 215, 0, 0.6)';
+      btn.innerHTML = '<span class="icon">🛡️</span> <span class="lbl" style="color:#ffd700">GOD: ON</span>';
+    } else {
+      btn.classList.remove('active', 'god-active');
+      btn.style.borderColor = '';
+      btn.style.boxShadow = '';
+      btn.innerHTML = '<span class="icon">🛡️</span> <span class="lbl">GOD: OFF</span>';
+    }
+  }
+
+  function updateHud() {
+    const elScore = document.getElementById('hudScore');
+    if (elScore) elScore.textContent = String(score).padStart(6, '0');
+    const elHigh = document.getElementById('hudHigh');
+    if (elHigh) elHigh.textContent = String(highScore).padStart(6, '0');
+    const elLevel = document.getElementById('hudLevel');
+    if (elLevel) elLevel.textContent = String(currentLevelIdx + 1);
+    
+    const elLives = document.getElementById('hudLives');
+    if (elLives) {
+      if (godMode) {
+        elLives.innerHTML = '<span style="color:#ffd700;font-weight:bold;">🐀 🐀 🐀 ∞ [GOD MODE]</span>';
+      } else {
+        let lifeIcons = '';
+        for (let i = 0; i < Math.min(lives, 5); i++) {
+          lifeIcons += '🐀 ';
+        }
+        if (lives > 5) lifeIcons += `+${lives - 5}`;
+        elLives.textContent = lifeIcons || '💀';
+      }
+    }
   }
 
   // --- Player Actions & Physics ---
@@ -1120,6 +1192,12 @@
   }
 
   function killPlayer(soundId = 4, force = false) {
+    if (godMode) {
+      if (!force) return; // Completely immune to all hazards, enemies, and traps
+      // Manual suicide reset (K key) in God Mode respawns without losing life
+      player.reset(levelData.startX, levelData.startY);
+      return;
+    }
     if (!force && player.invulnerableTimer > 0) return;
 
     lives--;
@@ -1127,10 +1205,16 @@
     sound.play(soundId);
     addSparkles(player.x + player.w / 2, player.y + player.h / 2, '#ff2a7a', 20);
 
+    // Trigger authentic Angel Death animation (PACKRAT.EXE 0x347F & Master Table Entry 54)
+    angelDeath.active = true;
+    angelDeath.x = player.x;
+    angelDeath.y = player.y;
+    angelDeath.timer = 0;
+
     if (lives <= 0) {
       gameOver();
     } else {
-      // Respawn at level start
+      // Respawn player coordinate at start; angelDeath renders angel ascending
       player.reset(levelData.startX, levelData.startY);
     }
   }
@@ -1270,6 +1354,30 @@
     pollGamepad();
 
     if (currentState !== GAME_STATE.PLAYING) return;
+
+    // Angel Death Ascension: Rat floats into heaven before respawning (PACKRAT.EXE 0x347F)
+    if (angelDeath.active) {
+      angelDeath.timer++;
+      angelDeath.y -= 2.0;
+      if (angelDeath.timer % 3 === 0) {
+        addSparkles(angelDeath.x + 12 + (Math.random() - 0.5) * 8, angelDeath.y + 24, '#ffd700', 2);
+        addSparkles(angelDeath.x + 12 + (Math.random() - 0.5) * 8, angelDeath.y + 24, '#00e5ff', 1);
+      }
+      if (angelDeath.y < camera.y - 40 || angelDeath.timer > 80) {
+        angelDeath.active = false;
+      }
+      player.vx = 0;
+      player.vy = 0;
+      camera.update();
+      for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.x += p.vx;
+        p.y += p.vy;
+        p.life--;
+        if (p.life <= 0) particles.splice(i, 1);
+      }
+      return;
+    }
 
     if (player.invulnerableTimer > 0) {
       player.invulnerableTimer--;
@@ -1506,12 +1614,12 @@
     }
 
     // --- Out of Bounds / Pit Fall Death (Photo 2) ---
-    if (player.y + player.h >= MAP_H * TILE_SIZE) {
+    if (player.y + player.h >= MAP_H * TILE_SIZE || (player.y > camera.y + VIRTUAL_H + 20 && player.vy > 0)) {
+      if (godMode) {
+        player.reset(levelData.startX, levelData.startY);
+        return;
+      }
       killPlayer(4, true); // Instant pit death with sad jingle! (force = true ignores invulnerability)
-      return;
-    }
-    if (player.y > camera.y + VIRTUAL_H + 20 && player.vy > 0) {
-      killPlayer(4, true); // Fell off bottom of visible screen
       return;
     }
 
@@ -1554,12 +1662,13 @@
         return;
       }
 
-      // Hazards
+      // Hazards (Lethal unless in God Mode)
       if (isTileHazard(tid)) {
-        if (tid === 2) {
+        if (godMode) continue;
+        if (tid === 2 || (tid >= 20 && tid <= 22)) {
           killPlayer(8); // Mousetrap snap!
-        } else if (tid >= 11 && tid <= 14) {
-          killPlayer(10); // Water splash!
+        } else if ((tid >= 11 && tid <= 14) || (tid >= 3 && tid <= 9)) {
+          killPlayer(10); // Water splash / lair!
         } else if (tid === 18 || tid === 19) {
           if (tid === 18) setTileAt(pt.tx, pt.ty, 19); // Sparks into shorted wire!
           killPlayer(7); // Electric zap!
@@ -1574,8 +1683,9 @@
     for (const enemy of enemies) {
       enemy.update();
 
-      // Check overlap with player
+      // Check overlap with player (Ignored in God Mode)
       if (
+        !godMode &&
         player.x < enemy.x + enemy.w &&
         player.x + player.w > enemy.x &&
         player.y < enemy.y + enemy.h &&
@@ -1649,9 +1759,9 @@
     const startRow = Math.max(0, Math.floor(camY / TILE_SIZE));
     const endRow = Math.min(MAP_H - 1, Math.floor((camY + VIRTUAL_H) / TILE_SIZE) + 1);
 
-    // Water animation frame (cycles 11..14 every 12 frames)
-    const waterAnimFrame = 11 + (Math.floor(gameTicks / 12) % 4);
-    // Electric spark animation frame (cycles 18..19 every 8 frames)
+    // Water animation frame (cycles 8 authentic frames from PACKRAT.EXE offset 0x1FD8)
+    const waterAnimFrame = Math.floor(gameTicks / 4) % 8;
+    // Electric wire spark frame (cycles 18..19 every 8 frames)
     const sparkAnimFrame = 18 + (Math.floor(gameTicks / 8) % 2);
 
     // 1. Draw Map Tiles (modulo 36 prevents illusionary tiles showing as rat sprites!)
@@ -1663,32 +1773,37 @@
         let tid = rawTid % 36;
         if (tid === 0) continue;
 
-        // Animated water (Authentic 32-step lookup table from PACKRAT.EXE at DS:0x346)
-        if (tid >= 11 && tid <= 14) {
-          const WATER_ANIM_TABLE = [1, 2, 3, 3, 2, 1, 0, 0, 0, 1, 2, 3, 3, 3, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
-          const animOffset = WATER_ANIM_TABLE[(Math.floor(gameTicks / 2)) % 32];
-          tid = 11 + animOffset;
+        // Animated water (Authentic 8-frame animation: tiles 2..9 from PACKRAT.EXE)
+        if (tid === 2) {
+          tid = 2 + waterAnimFrame;
         }
-        // Animated electric sparks
-        if (tid === 18 || tid === 19) {
-          tid = sparkAnimFrame;
+
+        // Animated enemy rat holes (Authentic 32-step eye blinking table from PACKRAT.EXE at offset 0x2006 / DS:0x346)
+        if (tid === 11) {
+          const EYE_ANIM_TABLE = [1, 2, 3, 3, 2, 1, 0, 0, 0, 1, 2, 3, 3, 3, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+          const animOffset = EYE_ANIM_TABLE[Math.floor(gameTicks / 3) % 32];
+          tid = 11 + animOffset;
         }
 
         const sprite = tileBitmaps[tid];
         if (sprite) {
           const screenX = tx * TILE_SIZE - camX;
-          const screenY = ty * TILE_SIZE - camY;
+          let screenY = ty * TILE_SIZE - camY;
+          // Authentic DOS offset: Tile 18/19 mousetraps are 32x8, rendered with +8 Y offset to rest flush on the floor (PACKRAT.EXE 0x1E3F: lea ax, [di + 8])
+          if (rawTid % 36 === 18 || rawTid % 36 === 19) {
+            screenY += 8;
+          }
           ctx.drawImage(sprite, screenX, screenY);
 
-          // Dynamic liquid water surface wave ripple and light glints
-          if (rawTid % 36 >= 11 && rawTid % 36 <= 14) {
-            const ripplePhase = (gameTicks * 0.18) % (Math.PI * 2);
-            const waveH = 2 + Math.sin(ripplePhase) * 1.5;
-            ctx.fillStyle = 'rgba(0, 229, 255, 0.45)';
-            ctx.fillRect(screenX + 4, screenY + 4, 24, waveH);
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.65)';
-            const glintX = screenX + 5 + ((gameTicks * 1.6) % 22);
-            ctx.fillRect(glintX, screenY + 4, 3, 1.5);
+          // Dynamic liquid water surface wave ripple and light glints (Authentic to blue water tiles 2..9 only!)
+          if (rawTid % 36 >= 2 && rawTid % 36 <= 9) {
+            const ripplePhase = (gameTicks * 0.18 + tx) % (Math.PI * 2);
+            const waveH = 1 + Math.sin(ripplePhase) * 1.0;
+            ctx.fillStyle = 'rgba(0, 229, 255, 0.35)';
+            ctx.fillRect(screenX, screenY, 16, waveH);
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.55)';
+            const glintX = screenX + ((gameTicks * 1.2 + tx * 3) % 13);
+            ctx.fillRect(glintX, screenY, 3, 1);
           }
         }
       }
@@ -1732,6 +1847,22 @@
   }
 
   function renderPlayer(camX, camY) {
+    // Authentic Angel Death Ascension sprite rendering (Master Table Entry 54: 24x32 with halo and wings)
+    if (angelDeath.active) {
+      const angelSprite = tileBitmaps[54];
+      if (angelSprite) {
+        ctx.save();
+        ctx.shadowColor = '#ffe066';
+        ctx.shadowBlur = 10;
+        const swayX = Math.sin(angelDeath.timer * 0.15) * 3;
+        const ax = Math.floor(angelDeath.x - camX + swayX);
+        const ay = Math.floor(angelDeath.y - camY);
+        ctx.drawImage(angelSprite, ax, ay);
+        ctx.restore();
+      }
+      return;
+    }
+
     // Invulnerability flashing
     if (player.invulnerableTimer > 0 && Math.floor(gameTicks / 4) % 2 === 0) {
       return;
@@ -1758,11 +1889,24 @@
       sprite = set.idle;
     }
 
+    if (godMode) {
+      ctx.save();
+      ctx.shadowColor = '#ffd700';
+      ctx.shadowBlur = 8;
+    }
+
     if (sprite) {
       // Draw sprite centered over bounding box
       const drawX = Math.floor(player.x - camX - (sprite.width - player.w) / 2);
       const drawY = Math.floor(player.y - camY - (sprite.height - player.h) + offsetY);
       ctx.drawImage(sprite, drawX, drawY);
+    }
+
+    if (godMode) {
+      ctx.restore();
+      if (Math.random() < 0.25) {
+        addSparkles(player.x + Math.random() * player.w, player.y + Math.random() * player.h, '#ffd700', 1);
+      }
     }
   }
 
@@ -2352,6 +2496,8 @@
 
   loadLevel(0);
 
+  document.getElementById('btnGodMode')?.addEventListener('click', toggleGodMode);
+
   // Expose comprehensive engine API for level select, testing, and debugging
   window.PACKRAT = {
     // Sound control
@@ -2368,6 +2514,16 @@
       const overlay = document.getElementById('crtOverlay');
       return overlay ? !overlay.classList.contains('hidden') : false;
     },
+    // God Mode (Invincible & Unlimited Lives)
+    get godMode() { return godMode; },
+    set godMode(v) {
+      godMode = !!v;
+      if (godMode) lives = 99;
+      updateHud();
+      updateGodModeButton();
+    },
+    toggleGodMode,
+    get sparkBitmaps() { return sparkBitmaps; },
     // Game lifecycle & state
     GAME_STATE,
     get state() { return currentState; },

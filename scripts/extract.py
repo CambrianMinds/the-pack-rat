@@ -2,10 +2,24 @@ import struct
 import json
 import os
 
-with open('PACKRAT.EXE', 'rb') as f:
+script_dir = os.path.dirname(os.path.abspath(__file__))
+root_dir = os.path.abspath(os.path.join(script_dir, '..')) if os.path.basename(script_dir) == 'scripts' else script_dir
+
+def find_source(name):
+    candidates = [
+        os.path.join(root_dir, 'original-source', name),
+        os.path.join(root_dir, name),
+        name
+    ]
+    for c in candidates:
+        if os.path.exists(c):
+            return c
+    raise FileNotFoundError(f"Cannot find {name}")
+
+with open(find_source('PACKRAT.EXE'), 'rb') as f:
     exe = f.read()
 
-with open('PACKRAT.001', 'rb') as f:
+with open(find_source('PACKRAT.001'), 'rb') as f:
     dat = f.read()
 
 ds_base = 141024
@@ -121,10 +135,10 @@ for i in range(13):
             break
     sounds.append(notes)
 
-# 4. Tiles
+# 4. Tiles (Authentic entries 1..61 in PACKRAT.EXE master table)
 tile_table_file = ds_base + 0xB62E
 tiles = {}
-for tile_id in range(52):
+for tile_id in range(1, 62):
     off, seg = struct.unpack_from('<HH', exe, tile_table_file + tile_id * 4)
     if seg == 0x21CE:
         fpos = ds_base + off
@@ -141,10 +155,10 @@ for off in [0xA380, 0xA564, 0xA748, 0xA92C]:
     px = list(exe[fpos+4 : fpos+4+w*h])
     enemy_frames.append({'w': w, 'h': h, 'pixels': px})
 
-# 6. Rat animation frames
+# 6. Rat animation frames (Entries 44..53 and 36..43)
 rat_frames = []
 for off in [
-    0x4EFE, 0x516E, 0x53FE, 0x568E, 0x58FE, 0x5B6E, 0x5DFE,
+    0x4C8E, 0x4EFE, 0x516E, 0x53FE, 0x568E, 0x58FE, 0x5B6E, 0x5DFE,
     0x608E, 0x631E, 0x65AE, 0x681E, 0x6A8E, 0x6D1E, 0x6FAE,
     0x721E, 0x748E, 0x771E
 ]:
@@ -153,17 +167,27 @@ for off in [
     px = list(exe[fpos+4 : fpos+4+w*h])
     rat_frames.append({'w': w, 'h': h, 'pixels': px})
 
+# 7. Authentic electric spark frames (Entries 60 & 61 at DS:0xB356 & DS:0xB45A)
+spark_frames = []
+for off in [0xB356, 0xB45A]:
+    fpos = ds_base + off
+    w, h = struct.unpack_from('<HH', exe, fpos)
+    px = list(exe[fpos+4 : fpos+4+w*h])
+    spark_frames.append({'w': w, 'h': h, 'pixels': px})
+
 output_data = {
     'palette': palette,
     'levels': levels,
     'sounds': sounds,
     'tiles': tiles,
     'enemyFrames': enemy_frames,
-    'ratFrames': rat_frames
+    'ratFrames': rat_frames,
+    'sparkFrames': spark_frames
 }
 
-with open('assets.js', 'w', encoding='utf-8') as f:
+out_assets = os.path.join(root_dir, 'assets.js')
+with open(out_assets, 'w', encoding='utf-8') as f:
     f.write('// The Pack Rat (1992 by Steve Blanding) - Extracted Authentic Game Assets\n')
     f.write('window.PACKRAT_ASSETS = ' + json.dumps(output_data) + ';\n')
 
-print('Success! Wrote assets.js, size:', os.path.getsize('assets.js'), 'bytes')
+print('Success! Wrote assets.js, size:', os.path.getsize(out_assets), 'bytes')

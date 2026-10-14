@@ -172,11 +172,21 @@
       justify-content: space-between;
       align-items: center;
       cursor: pointer;
+      -webkit-user-select: none;
       user-select: none;
       background: rgba(255, 255, 255, 0.01);
     }
     .suite-header:hover {
       background: rgba(255, 255, 255, 0.03);
+    }
+    .log-header {
+      padding: 16px 20px;
+    }
+    .log-title {
+      font-family: var(--font-retro);
+      font-size: 12px;
+      color: var(--neon-cyan);
+      margin-bottom: 10px;
     }
     .suite-title-area {
       display: flex;
@@ -342,8 +352,8 @@
     </div>
 
     <!-- Live Execution Logs -->
-    <div class="test-header" style="padding: 16px 20px;">
-      <h3 style="font-family: var(--font-retro); font-size: 12px; color: var(--neon-cyan); margin-bottom: 10px;">
+    <div class="test-header log-header">
+      <h3 class="log-title">
         CONSOLE OUTPUT
       </h3>
       <div class="log-box" id="logBox">
@@ -353,9 +363,9 @@
   </div>
 
   <!-- Load dependencies in exact order -->
-  <script src="assets.js"></script>
-  <script src="audio.js"></script>
-  <script src="game.js"></script>
+  <script src="../assets.js"></script>
+  <script src="../audio.js"></script>
+  <script src="../game.js"></script>
   <script src="tests-core.js"></script>
 
   <script>

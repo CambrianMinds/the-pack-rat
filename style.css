@@ -19,8 +19,8 @@
   box-sizing: border-box;
   margin: 0;
   padding: 0;
-  user-select: none;
   -webkit-user-select: none;
+  user-select: none;
 }
 
 body {
@@ -74,6 +74,7 @@ body::before {
   margin-bottom: 12px;
   padding: 8px 16px;
   background: rgba(22, 25, 34, 0.85);
+  -webkit-backdrop-filter: blur(12px);
   backdrop-filter: blur(12px);
   border: 1px solid var(--arcade-border);
   border-radius: 12px;
@@ -168,6 +169,13 @@ body::before {
   color: var(--neon-cyan);
 }
 
+.btn-icon.god-active {
+  background: rgba(255, 208, 40, 0.25);
+  border-color: var(--neon-gold);
+  color: var(--neon-gold);
+  box-shadow: 0 0 12px rgba(255, 208, 40, 0.5);
+}
+
 /* Arcade Cabinet Bezel */
 .cabinet-bezel {
   position: relative;
@@ -198,6 +206,7 @@ body::before {
 #gameCanvas {
   display: block;
   image-rendering: pixelated;
+  image-rendering: -webkit-optimize-contrast;
   image-rendering: crisp-edges;
   width: 960px;
   height: 600px;
@@ -339,11 +348,23 @@ body::before {
   box-shadow: 0 4px 16px rgba(0, 229, 255, 0.35);
 }
 
+.btn-action.gold {
+  background: linear-gradient(135deg, rgba(255, 208, 40, 0.15) 0%, rgba(245, 158, 11, 0.15) 100%);
+  border-color: var(--neon-gold);
+  color: var(--neon-gold);
+}
+
+.btn-action.gold:hover {
+  background: linear-gradient(135deg, rgba(255, 208, 40, 0.3) 0%, rgba(245, 158, 11, 0.3) 100%);
+  box-shadow: 0 4px 16px rgba(255, 208, 40, 0.35);
+}
+
 /* Modals & Overlays */
 .modal-overlay {
   position: fixed;
   inset: 0;
   background: rgba(5, 7, 12, 0.85);
+  -webkit-backdrop-filter: blur(8px);
   backdrop-filter: blur(8px);
   z-index: 100;
   display: flex;
@@ -716,4 +737,67 @@ body::before {
 
 .arcade-footer a:hover {
   text-decoration: underline;
+}
+
+.btn-action.btn-sm {
+  font-size: 11px;
+}
+
+.modal-actions-center {
+  margin-top: 20px;
+  text-align: center;
+}
+
+.modal-actions-split {
+  margin-top: 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.modal-card.modal-card-lg {
+  max-width: 880px;
+}
+
+.high-scores-list {
+  font-family: var(--font-retro);
+  font-size: 12px;
+  line-height: 2;
+}
+
+.editor-label {
+  font-size: 12px;
+  font-weight: bold;
+}
+
+.editor-label + .editor-label {
+  margin-left: 10px;
+}
+
+.editor-num-input {
+  width: 50px;
+  padding: 2px 4px;
+  background: #222;
+  color: #fff;
+  border: 1px solid #444;
+  border-radius: 4px;
+}
+
+.btn-editor {
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
+.btn-editor-test {
+  margin-left: auto;
+}
+
+.editor-help-text {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.preservation-byline {
+  color: var(--neon-cyan);
+  font-weight: bold;
 }

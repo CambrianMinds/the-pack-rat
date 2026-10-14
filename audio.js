@@ -23,6 +23,22 @@ class SoundSystem {
     } catch (e) {}
 
     this.enabled = !isMuted;
+
+    // Master volume (0..1), persisted across sessions
+    this.volume = 1;
+    try {
+      if (typeof localStorage !== 'undefined') {
+        const v = parseFloat(localStorage.getItem('packrat_volume'));
+        if (Number.isFinite(v)) this.volume = Math.min(1, Math.max(0, v));
+      }
+    } catch (e) {}
+  }
+
+  setVolume(v) {
+    this.volume = Math.min(1, Math.max(0, Number(v) || 0));
+    try {
+      if (typeof localStorage !== 'undefined') localStorage.setItem('packrat_volume', String(this.volume));
+    } catch (e) {}
   }
 
   init() {
@@ -119,9 +135,9 @@ class SoundSystem {
       if (freq > 20 && freq < 12000) {
         hasSound = true;
         osc.frequency.setValueAtTime(freq, scheduleTime);
-        gain.gain.setValueAtTime(0.12, scheduleTime);
+        gain.gain.setValueAtTime(0.12 * this.volume, scheduleTime);
         // tiny release at end of note for crisp separation
-        gain.gain.setValueAtTime(0.10, scheduleTime + durSec - 0.003);
+        gain.gain.setValueAtTime(0.10 * this.volume, scheduleTime + durSec - 0.003);
       } else {
         // Rest / silence
         gain.gain.setValueAtTime(0.0001, scheduleTime);

@@ -1,7 +1,7 @@
 # The Pack Rat (1992) — Authentic Web Edition
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Tests: 49/49 Passing](https://img.shields.io/badge/Tests-49%2F49%20Passing-brightgreen.svg)](test.html)
+[![Tests](https://github.com/CambrianMinds/the-pack-rat/actions/workflows/test.yml/badge.svg)](https://github.com/CambrianMinds/the-pack-rat/actions/workflows/test.yml)
 [![Platform: Web & Mobile](https://img.shields.io/badge/Platform-Web%20%7C%20Mobile-orange.svg)](#-features--preservation-highlights)
 [![Zero Dependencies](https://img.shields.io/badge/Dependencies-Zero%20(Pure%20Vanilla%20JS)-informational.svg)](#-quick-start)
 [![DOS Game Preservation](https://img.shields.io/badge/Preservation-MS--DOS%201992-purple.svg)](#-historical-context--preservation)

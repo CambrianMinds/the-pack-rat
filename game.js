@@ -137,12 +137,48 @@
     { name: 'Mike', score: 5200 }
   ];
 
+  // Validate untrusted localStorage data: must be an array of { name: string, score: finite number }
+  function sanitizeScores(list) {
+    if (!Array.isArray(list)) return null;
+    const clean = list
+      .filter(s => s && typeof s === 'object' && Number.isFinite(s.score) && s.score >= 0)
+      .map(s => ({ name: String(s.name == null ? 'PLAYER' : s.name).slice(0, 10), score: Math.floor(s.score) }))
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 7);
+    return clean.length > 0 ? clean : null;
+  }
+
   function getHighScores() {
     try {
       const saved = localStorage.getItem('packrat_highscores');
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const clean = sanitizeScores(JSON.parse(saved));
+        if (clean) return clean;
+      }
     } catch (e) {}
     return DEFAULT_SCORES.slice();
+  }
+
+  function escapeHtml(str) {
+    return String(str).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
+  // Furthest level reached (for the CONTINUE button)
+  function getProgress() {
+    try {
+      const n = parseInt(localStorage.getItem('packrat_progress'), 10);
+      if (Number.isInteger(n) && n > 0) return n;
+    } catch (e) {}
+    return 0;
+  }
+
+  function saveProgress(lvlIdx) {
+    try {
+      if (lvlIdx > getProgress()) {
+        localStorage.setItem('packrat_progress', String(lvlIdx));
+        updateContinueButton();
+      }
+    } catch (e) {}
   }
 
   function saveHighScore(name, score) {
@@ -545,14 +581,19 @@
   let rebindingAction = null;
 
   function loadBindings() {
+    customBindings = JSON.parse(JSON.stringify(DEFAULT_BINDINGS));
     try {
-      const saved = localStorage.getItem('packrat_controls');
-      if (saved) {
-        customBindings = JSON.parse(saved);
-        return;
+      const saved = JSON.parse(localStorage.getItem('packrat_controls'));
+      if (saved && typeof saved === 'object') {
+        // Merge only well-formed entries so corrupted storage cannot break input handling
+        for (const k of Object.keys(DEFAULT_BINDINGS)) {
+          const b = saved[k];
+          if (b && Array.isArray(b.keys) && b.keys.length > 0 && b.keys.every(x => typeof x === 'string')) {
+            customBindings[k].keys = b.keys.slice();
+          }
+        }
       }
     } catch (e) {}
-    customBindings = JSON.parse(JSON.stringify(DEFAULT_BINDINGS));
   }
 
   function saveBindings() {
@@ -614,6 +655,26 @@
       rebindingAction = null;
       populateControlsList();
       return;
+    }
+
+    // Modal keyboard support: Escape closes, Tab stays inside the dialog
+    const openModalEl = document.querySelectorAll('.modal-overlay.active')[0];
+    if (openModalEl) {
+      if (e.code === 'Escape') {
+        closeAllModals(true);
+        e.preventDefault();
+        return;
+      }
+      if (e.code === 'Tab') {
+        const f = Array.from(openModalEl.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'));
+        if (f.length) {
+          const first = f[0], last = f[f.length - 1];
+          if (e.shiftKey && document.activeElement === first) { last.focus(); e.preventDefault(); }
+          else if (!e.shiftKey && document.activeElement === last) { first.focus(); e.preventDefault(); }
+          else if (!f.includes(document.activeElement)) { first.focus(); e.preventDefault(); }
+        }
+        return;
+      }
     }
 
     if (matchesAction('left', e.code)) {
@@ -1117,7 +1178,7 @@
     updateHud();
   }
 
-  function showToast(msg, color = '#ffd700') {
+  function showToast(msg, color = '#ffd700', durationMs = 2200) {
     if (typeof document === 'undefined') return;
     let toast = document.getElementById('gameToast');
     if (!toast) {
@@ -1156,7 +1217,7 @@
     toast._timeout = setTimeout(() => {
       toast.style.opacity = '0';
       toast.style.transform = 'translateX(-50%) translateY(-8px)';
-    }, 2200);
+    }, durationMs);
   }
 
   function toggleGodMode() {
@@ -1302,6 +1363,7 @@
     currentState = GAME_STATE.LEVEL_CLEAR;
     sound.play(3); // Level victory fanfare!
     addScore(500); // 500 bonus points!
+    if (Number.isInteger(nextLvl)) saveProgress(nextLvl);
     addSparkles(player.x + 8, player.y + 8, '#ffd028', 24);
 
     setTimeout(() => {
@@ -2149,6 +2211,16 @@
     nextLifeScore = 10000;
     currentState = GAME_STATE.PLAYING;
     loadLevel(lvlIdx);
+    showFirstPlayHint();
+  }
+
+  // One-time onboarding hint explaining the non-obvious controls
+  function showFirstPlayHint() {
+    try {
+      if (localStorage.getItem('packrat_seen_hint') === '1') return;
+      localStorage.setItem('packrat_seen_hint', '1');
+    } catch (e) { return; }
+    showToast('ARROWS MOVE • SPACE JUMP • SHIFT + DIR PUSH SPOOLS • ↓ DISLODGE', '#00e5ff', 7000);
   }
 
   function togglePause() {
@@ -2184,24 +2256,59 @@
   }
 
   // --- Modal Helpers ---
+  let modalReturnFocus = null;
+
   function openModal(id) {
+    const prior = document.activeElement || null;
     closeAllModals();
     const m = document.getElementById(id);
-    if (m) m.classList.add('active');
+    if (m) {
+      m.classList.add('active');
+      if (m.setAttribute) m.setAttribute('aria-hidden', 'false');
+      modalReturnFocus = prior;
+    }
 
     if (id === 'modalLevels') populateLevelGrid();
     if (id === 'modalScores') populateHighScores();
     if (id === 'modalEditor') setupEditor();
     if (id === 'modalControls') populateControlsList();
+
+    // Move keyboard focus into the dialog
+    const target = m && m.querySelector && m.querySelector('.modal-close, button');
+    if (target && target.focus) target.focus();
   }
 
-  function closeAllModals() {
+  // restoreFocus=true returns focus to the control that opened the dialog (Escape / close button).
+  // It is false when a dialog action starts the game, so a focused button can't re-trigger on Enter/Space.
+  function closeAllModals(restoreFocus) {
     rebindingAction = null;
-    document.querySelectorAll('.modal-overlay').forEach(m => m.classList.remove('active'));
+    document.querySelectorAll('.modal-overlay').forEach(m => {
+      m.classList.remove('active');
+      if (m.setAttribute) m.setAttribute('aria-hidden', 'true');
+    });
+    if (restoreFocus === true && modalReturnFocus && modalReturnFocus.focus) modalReturnFocus.focus();
+    modalReturnFocus = null;
   }
 
   document.querySelectorAll('[data-close]').forEach(btn => {
-    btn.addEventListener('click', closeAllModals);
+    btn.addEventListener('click', () => closeAllModals(true));
+  });
+
+  // Dialog semantics for assistive technology
+  document.querySelectorAll('.modal-overlay').forEach(m => {
+    const card = m.querySelector('.modal-card');
+    const title = m.querySelector('.modal-title');
+    if (card && card.setAttribute) {
+      card.setAttribute('role', 'dialog');
+      card.setAttribute('aria-modal', 'true');
+      if (title && m.id) {
+        title.id = `${m.id}Title`;
+        card.setAttribute('aria-labelledby', title.id);
+      }
+    }
+    if (m.setAttribute) m.setAttribute('aria-hidden', 'true');
+    const x = m.querySelector('.modal-close');
+    if (x && x.setAttribute) x.setAttribute('aria-label', 'Close dialog');
   });
 
   // --- Configurable Controls UI ---
@@ -2273,7 +2380,7 @@
     scores.forEach((s, i) => {
       html += `<tr style="border-bottom: 1px solid #222;">
         <td style="padding: 6px; color: var(--neon-gold);">${i + 1}.</td>
-        <td style="padding: 6px;">${s.name}</td>
+        <td style="padding: 6px;">${escapeHtml(s.name)}</td>
         <td style="padding: 6px; text-align: right; color: var(--neon-gold);">${s.score}</td>
       </tr>`;
     });
@@ -2547,7 +2654,147 @@
     toggleCrt(false);
   }
 
+  // --- Continue (furthest level reached) ---
+  function updateContinueButton() {
+    const btn = document.getElementById('btnContinue');
+    if (!btn) return;
+    const p = getProgress();
+    btn.style.display = p > 0 ? '' : 'none';
+    btn.textContent = `⏩ CONTINUE (LVL ${p + 1})`;
+  }
+  document.getElementById('btnContinue')?.addEventListener('click', () => {
+    closeAllModals();
+    startGame(getProgress());
+  });
+  updateContinueButton();
+
+  // --- Volume ---
+  const volumeSlider = document.getElementById('volumeSlider');
+  if (volumeSlider) {
+    volumeSlider.value = String(Math.round(sound.volume * 100));
+    volumeSlider.addEventListener('input', () => {
+      sound.setVolume(Number(volumeSlider.value) / 100);
+      sound.init();
+      sound.play(1); // audible feedback while dragging
+    });
+  }
+
+  // --- Display scaling: FIT (responsive), PIXEL (integer multiples), 4:3 (DOS monitor aspect) ---
+  const SCALE_MODES = ['fit', 'integer', '43'];
+  const SCALE_LABELS = { fit: 'FIT', integer: 'PIXEL', '43': '4:3' };
+  let scaleMode = 'fit';
+  try {
+    const savedScale = localStorage.getItem('packrat_scale');
+    if (SCALE_MODES.includes(savedScale)) scaleMode = savedScale;
+  } catch (e) {}
+
+  function applyScaleMode() {
+    canvas.classList.toggle('scale-43', scaleMode === '43');
+    if (scaleMode === 'integer' && typeof window.innerWidth === 'number') {
+      const s = Math.max(1, Math.floor(Math.min((window.innerWidth * 0.92) / VIRTUAL_W, (window.innerHeight * 0.58) / VIRTUAL_H)));
+      canvas.style.width = `${VIRTUAL_W * s}px`;
+      canvas.style.height = `${VIRTUAL_H * s}px`;
+      canvas.style.maxWidth = 'none';
+      canvas.style.maxHeight = 'none';
+    } else {
+      canvas.style.width = '';
+      canvas.style.height = '';
+      canvas.style.maxWidth = '';
+      canvas.style.maxHeight = '';
+    }
+    const lbl = document.getElementById('btnScale')?.querySelector('.lbl');
+    if (lbl) lbl.textContent = `SCALE: ${SCALE_LABELS[scaleMode]}`;
+  }
+  document.getElementById('btnScale')?.addEventListener('click', () => {
+    scaleMode = SCALE_MODES[(SCALE_MODES.indexOf(scaleMode) + 1) % SCALE_MODES.length];
+    try { localStorage.setItem('packrat_scale', scaleMode); } catch (e) {}
+    applyScaleMode();
+  });
+  window.addEventListener('resize', () => { if (scaleMode === 'integer') applyScaleMode(); });
+  applyScaleMode();
+
+  // --- Left-handed touch layout ---
+  const touchPanel = document.getElementById('touchControls');
+  function applyHandedness(left) {
+    touchPanel?.classList.toggle('lefty', left);
+    const b = document.getElementById('btnHand');
+    if (b) b.textContent = left ? '🤚 LAYOUT: LEFT-HANDED' : '🤚 LAYOUT: RIGHT-HANDED';
+    try { localStorage.setItem('packrat_lefty', left ? '1' : '0'); } catch (e) {}
+  }
+  document.getElementById('btnHand')?.addEventListener('click', () => {
+    applyHandedness(!touchPanel?.classList.contains('lefty'));
+  });
+  try { applyHandedness(localStorage.getItem('packrat_lefty') === '1'); } catch (e) {}
+
+  // --- Shareable level links (RLE-compressed tiles in the URL hash) ---
+  function b64urlEncode(str) {
+    return btoa(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+  function b64urlDecode(str) {
+    const pad = str.length % 4 ? '='.repeat(4 - (str.length % 4)) : '';
+    return atob(str.replace(/-/g, '+').replace(/_/g, '/') + pad);
+  }
+
+  function encodeLevelShare() {
+    let bin = '';
+    for (let i = 0; i < currentTiles.length;) {
+      const v = currentTiles[i];
+      let n = 1;
+      while (i + n < currentTiles.length && currentTiles[i + n] === v && n < 255) n++;
+      bin += String.fromCharCode(v & 255, n);
+      i += n;
+    }
+    const dest = [];
+    currentDestMap.forEach((d, idx) => { if (d) dest.push([idx, d]); });
+    const bgEl = document.getElementById('editorBgColor');
+    const payload = {
+      v: 1,
+      bg: (bgEl && parseInt(bgEl.value, 10)) || levelData.bg || 3,
+      sx: levelData.startX,
+      sy: levelData.startY,
+      t: btoa(bin),
+      d: dest
+    };
+    return b64urlEncode(JSON.stringify(payload));
+  }
+
+  function decodeLevelShare(code) {
+    const p = JSON.parse(b64urlDecode(code));
+    if (!p || p.v !== 1 || typeof p.t !== 'string') throw new Error('Unrecognized share link.');
+    const bin = atob(p.t);
+    const tiles = [];
+    for (let i = 0; i + 1 < bin.length; i += 2) {
+      const v = bin.charCodeAt(i), n = bin.charCodeAt(i + 1);
+      for (let k = 0; k < n; k++) tiles.push(v);
+    }
+    const destMap = new Array(MAP_W * MAP_H).fill(0);
+    (Array.isArray(p.d) ? p.d : []).forEach(([idx, d]) => {
+      if (Number.isInteger(idx) && idx >= 0 && idx < destMap.length && Number.isInteger(d)) destMap[idx] = d;
+    });
+    return { tiles, destMap, bg: p.bg, startX: p.sx, startY: p.sy };
+  }
+
+  document.getElementById('btnEditorShare')?.addEventListener('click', () => {
+    const url = `${location.origin}${location.pathname}#level=${encodeLevelShare()}`;
+    navigator.clipboard.writeText(url).then(() => {
+      showToast('🔗 SHARE LINK COPIED', '#00e5ff');
+    }).catch(() => {
+      prompt('Copy your level link:', url);
+    });
+  });
+
   loadLevel(0);
+
+  // Open a shared level if the page was loaded with #level=...
+  try {
+    if (typeof location !== 'undefined' && location.hash.startsWith('#level=')) {
+      const shared = decodeLevelShare(location.hash.slice('#level='.length));
+      startGame(0);
+      if (importCustomLevel(shared)) enemies = [];
+    }
+  } catch (err) {
+    showToast('COULD NOT LOAD SHARED LEVEL', '#ff2a7a', 4000);
+  }
 
   document.getElementById('btnGodMode')?.addEventListener('click', toggleGodMode);
 
@@ -2615,6 +2862,13 @@
     isTileHazard,
     isTileBauble,
     importCustomLevel,
+    sanitizeScores,
+    getHighScores,
+    escapeHtml,
+    getProgress,
+    saveProgress,
+    encodeLevelShare,
+    decodeLevelShare,
     pollGamepad,
     // Mechanics
     handleJump,

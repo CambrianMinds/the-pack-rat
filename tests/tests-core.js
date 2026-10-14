@@ -1186,6 +1186,80 @@
           }
         }
       ]
+    },
+    {
+      name: 'Persistence, Sanitization & Sharing',
+      tests: [
+        {
+          name: 'Corrupted high-score storage falls back to defaults instead of crashing',
+          fn(PACKRAT, assert) {
+            const orig = localStorage.getItem('packrat_highscores');
+            try {
+              localStorage.setItem('packrat_highscores', '{"not":"an array"}');
+              assert.equal(PACKRAT.getHighScores().length, 7, 'Non-array data should fall back to 7 default scores');
+              localStorage.setItem('packrat_highscores', 'not json at all');
+              assert.equal(PACKRAT.getHighScores().length, 7, 'Unparseable data should fall back to defaults');
+              localStorage.setItem('packrat_highscores', JSON.stringify([{ name: 'A', score: 'x' }, null, { name: 'B', score: 5 }]));
+              const cleaned = PACKRAT.getHighScores();
+              assert.equal(cleaned.length, 1, 'Only well-formed entries are kept');
+              assert.equal(cleaned[0].name, 'B');
+            } finally {
+              if (orig === null) localStorage.removeItem('packrat_highscores');
+              else localStorage.setItem('packrat_highscores', orig);
+            }
+          }
+        },
+        {
+          name: 'High-score names are HTML-escaped',
+          fn(PACKRAT, assert) {
+            assert.equal(PACKRAT.escapeHtml('<img src=x onerror=1>'), '&lt;img src=x onerror=1&gt;');
+            assert.equal(PACKRAT.escapeHtml('a&"\''), 'a&amp;&quot;&#39;');
+          }
+        },
+        {
+          name: 'Progress only ever advances',
+          fn(PACKRAT, assert) {
+            const orig = localStorage.getItem('packrat_progress');
+            try {
+              localStorage.removeItem('packrat_progress');
+              assert.equal(PACKRAT.getProgress(), 0);
+              PACKRAT.saveProgress(5);
+              PACKRAT.saveProgress(2);
+              assert.equal(PACKRAT.getProgress(), 5, 'Lower level must not overwrite furthest progress');
+            } finally {
+              if (orig === null) localStorage.removeItem('packrat_progress');
+              else localStorage.setItem('packrat_progress', orig);
+            }
+          }
+        },
+        {
+          name: 'Level share link round-trips tiles and warp destinations',
+          fn(PACKRAT, assert) {
+            PACKRAT.loadLevel(0);
+            const tiles = new Array(4096).fill(0);
+            tiles[63 * 64 + 3] = 1;
+            tiles[63 * 64 + 4] = 15;
+            PACKRAT.importCustomLevel({ tiles, destMap: new Array(4096).fill(0).map((_, i) => (i === 63 * 64 + 4 ? 7 : 0)), bg: 4, startX: 5, startY: 6 });
+            const code = PACKRAT.encodeLevelShare();
+            assert.ok(/^[A-Za-z0-9_-]+$/.test(code), 'Share code must be URL-safe');
+            assert.lessThan(code.length, 2000, 'RLE compression keeps links short');
+            const decoded = PACKRAT.decodeLevelShare(code);
+            assert.equal(decoded.tiles.length, 4096);
+            assert.equal(decoded.tiles[63 * 64 + 3], 1);
+            assert.equal(decoded.tiles[63 * 64 + 4], 15);
+            assert.equal(decoded.destMap[63 * 64 + 4], 7);
+            assert.ok(PACKRAT.importCustomLevel(decoded), 'Decoded level should import');
+          }
+        },
+        {
+          name: 'Malformed share links throw rather than corrupt state',
+          fn(PACKRAT, assert) {
+            let threw = false;
+            try { PACKRAT.decodeLevelShare('!!!not-base64!!!'); } catch (e) { threw = true; }
+            assert.ok(threw, 'Garbage share code must throw');
+          }
+        }
+      ]
     }
   ];
 

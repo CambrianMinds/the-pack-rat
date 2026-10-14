@@ -591,11 +591,22 @@ body::before {
   padding: 16px 12px 6px 12px;
 }
 
-@media (pointer: coarse), (max-width: 900px) {
+/* Show on-screen controls only on touch-first devices (not on small desktop windows) */
+@media (pointer: coarse) {
   .touch-controls {
     display: flex;
   }
 }
+
+.touch-controls.lefty {
+  flex-direction: row-reverse;
+}
+
+.touch-hand-toggle {
+  font-size: 10px;
+  opacity: 0.7;
+}
+
 
 .touch-dpad {
   display: grid;
@@ -801,3 +812,47 @@ body::before {
   color: var(--neon-cyan);
   font-weight: bold;
 }
+
+/* --- Accessibility & new controls --- */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.header-controls {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.volume-control input[type="range"] {
+  width: 80px;
+  accent-color: var(--neon-cyan);
+  cursor: pointer;
+}
+
+/* DOS monitors were 4:3 with non-square pixels */
+#gameCanvas.scale-43 {
+  object-fit: fill;
+  aspect-ratio: 4 / 3;
+  width: min(800px, 92vw, calc(58vh * 4 / 3));
+  height: auto;
+  max-height: none;
+}
+
+:focus-visible {
+  outline: 2px solid var(--neon-cyan);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+

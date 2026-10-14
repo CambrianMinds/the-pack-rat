@@ -49,6 +49,13 @@
         <button id="btnSound" class="btn-icon" title="Toggle Sound (F2)">
           <span class="icon">🔊</span> <span class="lbl">SOUND: ON</span>
         </button>
+        <label class="volume-control" title="Master volume">
+          <span class="visually-hidden">Volume</span>
+          <input type="range" id="volumeSlider" min="0" max="100" value="100" aria-label="Master volume">
+        </label>
+        <button id="btnScale" class="btn-icon" title="Cycle display scaling: Fit / Pixel-perfect / 4:3">
+          <span class="icon">🖥️</span> <span class="lbl">SCALE: FIT</span>
+        </button>
         <button id="btnCrt" class="btn-icon" title="Toggle CRT Scanlines (C)">
           <span class="icon">📺</span> <span class="lbl">CRT: OFF</span>
         </button>
@@ -96,6 +103,7 @@
     <!-- Main Toolbar -->
     <nav class="action-toolbar">
       <button id="btnPlay" class="btn-action primary">▶ PLAY GAME</button>
+      <button id="btnContinue" class="btn-action primary" style="display:none">⏩ CONTINUE</button>
       <button id="btnLevels" class="btn-action">📂 LEVEL SELECT</button>
       <button id="btnControls" class="btn-action">🎮 CONTROLS</button>
       <button id="btnEditor" class="btn-action cyan">🛠 LEVEL EDITOR</button>
@@ -122,6 +130,7 @@
         <button class="touch-action-btn secondary" id="touchPush" aria-label="Push">PUSH</button>
         <button class="touch-action-btn" id="touchJump" aria-label="Jump">JUMP</button>
       </div>
+      <button id="btnHand" class="btn-action btn-sm touch-hand-toggle">🤚 LAYOUT: RIGHT-HANDED</button>
     </div>
 
     <!-- Footer -->
@@ -237,6 +246,7 @@
             <label class="editor-label">Hole Warp Level: <input type="number" id="editorHoleDest" class="editor-num-input" min="0" max="99" value="1"></label>
             <button id="btnEditorTest" class="btn-action primary btn-editor btn-editor-test">▶ TEST LEVEL</button>
             <button id="btnEditorExport" class="btn-action btn-editor">💾 EXPORT</button>
+            <button id="btnEditorShare" class="btn-action btn-editor">🔗 SHARE LINK</button>
             <button id="btnEditorImport" class="btn-action btn-editor">📂 IMPORT</button>
             <button id="btnEditorClear" class="btn-action btn-editor">🗑 CLEAR</button>
           </div>

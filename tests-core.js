@@ -995,6 +995,33 @@
 
             assert.equal(PACKRAT.player.inPipe, true, 'Player should enter pipe (inPipe = true)');
           }
+        },
+        {
+          name: 'Level 0 mouse hole accurately routes to Level 1 (authentic 16-bit word decode)',
+          fn(PACKRAT, assert) {
+            PACKRAT.loadLevel(0);
+            PACKRAT.state = PACKRAT.GAME_STATE.PLAYING;
+
+            // Mouse hole (tile 15) in Level 0 is at tile (58, 14)
+            const dest = PACKRAT.getDestAt(58, 14);
+            assert.equal(dest, 1, 'Mouse hole in Level 0 at (58, 14) must have destination level 1');
+          }
+        },
+        {
+          name: 'Level 2 and Level 3 provide authentic branching destinations (including secret levels)',
+          fn(PACKRAT, assert) {
+            PACKRAT.loadLevel(2);
+            const lvl2Dests = [];
+            for (let y = 0; y < 64; y++) {
+              for (let x = 0; x < 64; x++) {
+                if (PACKRAT.getTileAt(x, y) === 15) {
+                  lvl2Dests.push(PACKRAT.getDestAt(x, y));
+                }
+              }
+            }
+            assert.equal(lvl2Dests.includes(3), true, 'Level 2 must include main mouse hole to Level 3');
+            assert.equal(lvl2Dests.includes(11), true, 'Level 2 must include secret mouse hole to Level 11');
+          }
         }
       ]
     },
@@ -1042,6 +1069,74 @@
             // Toggle CRT off again
             PACKRAT.setCrtEnabled(false);
             assert.equal(PACKRAT.isCrtEnabled, false, 'CRT overlay should return to disabled (OFF)');
+          }
+        },
+        {
+          name: 'Gamepad edge triggers single-fire pause and prevents rapid toggling',
+          fn(PACKRAT, assert) {
+            PACKRAT.loadLevel(0);
+            PACKRAT.state = PACKRAT.GAME_STATE.PLAYING;
+
+            const origGetGamepads = navigator.getGamepads;
+            try {
+              const mockButtons = new Array(16).fill(null).map(() => ({ pressed: false }));
+              navigator.getGamepads = () => [{ axes: [0, 0], buttons: mockButtons }];
+
+              // Initial poll
+              PACKRAT.pollGamepad();
+              assert.equal(PACKRAT.state, PACKRAT.GAME_STATE.PLAYING, 'State should be PLAYING initially');
+
+              // Press Start (Button 9)
+              mockButtons[9].pressed = true;
+              PACKRAT.pollGamepad();
+              assert.equal(PACKRAT.state, PACKRAT.GAME_STATE.PAUSED, 'State should transition to PAUSED on Start edge');
+
+              // Hold Start (Button 9 remains pressed on next frame)
+              PACKRAT.pollGamepad();
+              assert.equal(PACKRAT.state, PACKRAT.GAME_STATE.PAUSED, 'State must remain PAUSED while Start is held (no rapid-fire toggling)');
+
+              // Release Start
+              mockButtons[9].pressed = false;
+              PACKRAT.pollGamepad();
+              assert.equal(PACKRAT.state, PACKRAT.GAME_STATE.PAUSED, 'State remains PAUSED after release');
+
+              // Press Start again
+              mockButtons[9].pressed = true;
+              PACKRAT.pollGamepad();
+              assert.equal(PACKRAT.state, PACKRAT.GAME_STATE.PLAYING, 'State should resume to PLAYING on second press');
+            } finally {
+              navigator.getGamepads = origGetGamepads;
+            }
+          }
+        },
+        {
+          name: 'Level Editor importCustomLevel successfully validates and loads custom level data',
+          fn(PACKRAT, assert) {
+            PACKRAT.loadLevel(0);
+
+            // Construct custom 64x64 level
+            const customTiles = new Array(4096).fill(0);
+            customTiles[63 * 64 + 10] = 1; // 1 solid brick
+            customTiles[63 * 64 + 11] = 15; // mouse hole
+
+            const customLevel = {
+              id: 999,
+              bg: 4,
+              startX: 12,
+              startY: 34,
+              tiles: customTiles,
+              destMap: new Array(4096).fill(2)
+            };
+
+            const success = PACKRAT.importCustomLevel(customLevel);
+            assert.equal(success, true, 'Valid custom level should import successfully');
+            assert.equal(PACKRAT.getTileAt(10, 63), 1, 'Imported tile at (10, 63) should be brick (1)');
+            assert.equal(PACKRAT.getDestAt(11, 63), 2, 'Imported destination at (11, 63) should be 2');
+            assert.equal(PACKRAT.player.x, 12 * 16 + 1, 'Player X should reset to imported startX * 16 + 1 (193)');
+
+            // Invalid data should fail gracefully
+            const fail = PACKRAT.importCustomLevel({ tiles: [1, 2, 3] });
+            assert.equal(fail, false, 'Invalid tiles length must return false');
           }
         }
       ]

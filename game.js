@@ -697,12 +697,18 @@
   bindTouch('touchUp', () => { keys.up = true; }, () => { keys.up = false; });
   bindTouch('touchDown', () => { keys.down = true; }, () => { keys.down = false; });
   bindTouch('touchJump', () => {
+    if (currentState === GAME_STATE.TITLE || currentState === GAME_STATE.GAME_OVER) {
+      startGame(0);
+      return;
+    }
     if (!keys.jump && currentState === GAME_STATE.PLAYING) handleJump();
     keys.jump = true;
   }, () => { keys.jump = false; });
   bindTouch('touchPush', () => { keys.push = true; }, () => { keys.push = false; });
 
-  // Gamepad Polling
+  // Gamepad Polling with Edge Detection and Full Mapping
+  let prevGamepadButtons = {};
+
   function pollGamepad() {
     const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
     if (!gamepads || !gamepads[0]) return;
@@ -711,28 +717,61 @@
     // D-Pad or Left Stick
     const axisX = gp.axes[0] || 0;
     const axisY = gp.axes[1] || 0;
-    const btnLeft = gp.buttons[14]?.pressed || axisX < -0.4;
-    const btnRight = gp.buttons[15]?.pressed || axisX > 0.4;
-    const btnUp = gp.buttons[12]?.pressed || axisY < -0.4;
-    const btnDown = gp.buttons[13]?.pressed || axisY > 0.4;
-    const btnJump = gp.buttons[0]?.pressed || gp.buttons[1]?.pressed; // A or B
-    const btnPush = gp.buttons[2]?.pressed || gp.buttons[3]?.pressed || gp.buttons[5]?.pressed; // X, Y, RB
-    const btnStart = gp.buttons[9]?.pressed; // Start
+    const btnLeft = !!(gp.buttons[14]?.pressed || axisX < -0.4);
+    const btnRight = !!(gp.buttons[15]?.pressed || axisX > 0.4);
+    const btnUp = !!(gp.buttons[12]?.pressed || axisY < -0.4);
+    const btnDown = !!(gp.buttons[13]?.pressed || axisY > 0.4);
+    const btnJump = !!(gp.buttons[0]?.pressed || gp.buttons[1]?.pressed); // A or B
+    const btnPush = !!(gp.buttons[2]?.pressed || gp.buttons[3]?.pressed || gp.buttons[6]?.pressed || gp.buttons[7]?.pressed); // X, Y, LT, RT
+    const btnStart = !!gp.buttons[9]?.pressed; // Start
+    const btnSelect = !!gp.buttons[8]?.pressed; // Select / Back (Suicide K)
+    const btnLb = !!gp.buttons[4]?.pressed; // Left Bumper (Sound Toggle)
+    const btnRb = !!gp.buttons[5]?.pressed; // Right Bumper (Minimap / Zoom)
 
     keys.left = btnLeft;
     keys.right = btnRight;
     keys.up = btnUp;
     keys.down = btnDown;
-
-    if (btnJump && !keys.jump && currentState === GAME_STATE.PLAYING) {
-      handleJump();
-    }
-    keys.jump = btnJump;
     keys.push = btnPush;
 
-    if (btnStart) {
+    // Edge triggers for single-fire actions
+    const jumpJustPressed = btnJump && !prevGamepadButtons.jump;
+    const startJustPressed = btnStart && !prevGamepadButtons.start;
+    const selectJustPressed = btnSelect && !prevGamepadButtons.select;
+    const lbJustPressed = btnLb && !prevGamepadButtons.lb;
+    const rbJustPressed = btnRb && !prevGamepadButtons.rb;
+
+    if (jumpJustPressed) {
+      if (currentState === GAME_STATE.TITLE || currentState === GAME_STATE.GAME_OVER) {
+        startGame(0);
+      } else if (currentState === GAME_STATE.PLAYING) {
+        handleJump();
+      }
+    }
+    keys.jump = btnJump;
+
+    if (startJustPressed) {
       togglePause();
     }
+    if (selectJustPressed) {
+      if (currentState === GAME_STATE.PLAYING) {
+        killPlayer(4, true);
+      }
+    }
+    if (lbJustPressed) {
+      toggleSoundSetting();
+    }
+    if (rbJustPressed) {
+      toggleMinimap();
+    }
+
+    prevGamepadButtons = {
+      jump: btnJump,
+      start: btnStart,
+      select: btnSelect,
+      lb: btnLb,
+      rb: btnRb
+    };
   }
 
   // --- Authentic Tile Classification (Extracted directly from PACKRAT.EXE) ---
@@ -1099,7 +1138,20 @@
   function gameOver() {
     currentState = GAME_STATE.GAME_OVER;
     sound.play(4); // Sad Game Over melody!
-    saveHighScore('PLAYER', score);
+    const currentHighs = getHighScores();
+    const qualifies = currentHighs.length < 7 || score > currentHighs[currentHighs.length - 1].score;
+
+    let playerName = 'PLAYER';
+    if (qualifies && score > 0 && typeof window !== 'undefined' && typeof window.prompt === 'function') {
+      try {
+        const input = window.prompt(`🎉 NEW HIGH SCORE: ${score}!\nEnter your initials / name:`, 'RAT');
+        if (input && input.trim()) {
+          playerName = input.trim().slice(0, 10).toUpperCase();
+        }
+      } catch (e) {}
+    }
+
+    saveHighScore(playerName, score);
     highScore = Math.max(highScore, score);
     updateHud();
   }
@@ -1494,7 +1546,10 @@
 
       // Mouse Hole Exit (Tile 15)
       if (tid === 15) {
-        const nextLvl = getDestAt(pt.tx, pt.ty);
+        let nextLvl = getDestAt(pt.tx, pt.ty);
+        if (typeof nextLvl !== 'number' || isNaN(nextLvl)) {
+          nextLvl = (currentLevelIdx + 1) % (window.PACKRAT_ASSETS?.levels?.length || 16);
+        }
         completeLevel(nextLvl);
         return;
       }
@@ -1863,11 +1918,31 @@
     ctx.fillText('+500 BONUS POINTS!', VIRTUAL_W / 2, VIRTUAL_H / 2 + 10);
   }
 
-  // --- Game Loop ---
-  function gameLoop() {
-    update();
+  // --- Game Loop (Fixed 60Hz Physics Timestep) ---
+  let lastFrameTime = 0;
+  let physicsAccumulator = 0;
+  const PHYSICS_STEP_MS = 1000 / 60; // 16.666ms per tick
+
+  function gameLoop(currentTime) {
+    if (!lastFrameTime) lastFrameTime = currentTime || (typeof performance !== 'undefined' ? performance.now() : Date.now());
+    const now = currentTime || (typeof performance !== 'undefined' ? performance.now() : Date.now());
+    let delta = now - lastFrameTime;
+    lastFrameTime = now;
+
+    // Clamp delta to avoid spiral-of-death on background tabs
+    if (delta > 100) delta = 100;
+    if (delta < 0) delta = 0;
+    physicsAccumulator += delta;
+
+    while (physicsAccumulator >= PHYSICS_STEP_MS) {
+      update();
+      physicsAccumulator -= PHYSICS_STEP_MS;
+    }
+
     render();
-    requestAnimationFrame(gameLoop);
+    if (typeof requestAnimationFrame !== 'undefined') {
+      requestAnimationFrame(gameLoop);
+    }
   }
 
   // --- Start Game & Mode Changes ---
@@ -2088,10 +2163,15 @@
     element.classList.add('selected');
   }
 
-  // Draw on canvas during gameplay or editor mode
+  // Pointerdown on canvas: editor painting OR title/game-over start/restart
   canvas.addEventListener('pointerdown', (e) => {
-    if (document.getElementById('modalEditor').classList.contains('active')) {
+    sound.init();
+    if (document.getElementById('modalEditor')?.classList.contains('active')) {
       paintTileAtPointer(e);
+      return;
+    }
+    if (currentState === GAME_STATE.TITLE || currentState === GAME_STATE.GAME_OVER) {
+      startGame(0);
     }
   });
 
@@ -2138,6 +2218,47 @@
     }).catch(() => {
       prompt('Copy your level JSON:', jsonStr);
     });
+  });
+
+  function importCustomLevel(jsonStr) {
+    try {
+      const data = typeof jsonStr === 'string' ? JSON.parse(jsonStr) : jsonStr;
+      if (!data || !Array.isArray(data.tiles) || data.tiles.length !== MAP_W * MAP_H) {
+        throw new Error('Invalid level data: Expected tiles array of length 4096 (64x64).');
+      }
+
+      currentTiles = data.tiles.slice();
+      currentDestMap = (Array.isArray(data.destMap) && data.destMap.length === MAP_W * MAP_H)
+        ? data.destMap.slice()
+        : new Array(MAP_W * MAP_H).fill(0);
+
+      if (typeof data.bg === 'number') {
+        const bgInput = document.getElementById('editorBgColor');
+        if (bgInput) bgInput.value = data.bg;
+        const pal = window.PACKRAT_ASSETS?.palette;
+        if (pal && pal[data.bg]) {
+          const rgb = pal[data.bg];
+          levelBgColor = `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})`;
+        }
+      }
+
+      if (typeof data.startX === 'number') levelData.startX = data.startX;
+      if (typeof data.startY === 'number') levelData.startY = data.startY;
+      player.reset(levelData.startX, levelData.startY);
+      return true;
+    } catch (err) {
+      if (typeof alert === 'function') alert('Failed to import level: ' + err.message);
+      return false;
+    }
+  }
+
+  document.getElementById('btnEditorImport')?.addEventListener('click', () => {
+    const input = prompt('Paste your Custom Level JSON:');
+    if (input && input.trim()) {
+      if (importCustomLevel(input.trim())) {
+        alert('Custom level imported successfully! Click TEST LEVEL to play.');
+      }
+    }
   });
 
   document.getElementById('btnEditorClear')?.addEventListener('click', () => {
@@ -2284,6 +2405,8 @@
     isTileMovable,
     isTileHazard,
     isTileBauble,
+    importCustomLevel,
+    pollGamepad,
     // Mechanics
     handleJump,
     tryPushBlock,

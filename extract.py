@@ -89,16 +89,15 @@ while pos < len(dat):
     stream = dat[pos+2:pos+2+size]
     decomp = Decoder(stream).decode(0x3004)
     hdr = list(decomp[:4])
-    l1 = decomp[4:4+4096]
-    l2 = decomp[4+4096:4+8192]
-    l3 = decomp[4+8192:4+12288]
-    dest_map = [l1[i] | (l2[i] << 8) for i in range(4096)]
+    dest_bytes = decomp[4:4+8192]
+    tiles = decomp[4+8192:4+12288]
+    dest_map = [dest_bytes[i*2] | (dest_bytes[i*2+1] << 8) for i in range(4096)]
     levels.append({
         'id': lvl,
         'bg': hdr[0],
         'startX': hdr[1],
         'startY': hdr[2],
-        'tiles': list(l3),
+        'tiles': list(tiles),
         'destMap': dest_map
     })
     pos += 2 + size

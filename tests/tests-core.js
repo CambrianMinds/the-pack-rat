@@ -887,6 +887,16 @@
             PACKRAT.step(1);
             assert.equal(PACKRAT.lives, 99, 'Electric wire must not deduct lives in God Mode');
 
+            // 3. Water walking support in God Mode
+            assert.ok(PACKRAT.isTileFloorSolid(2), 'Water tile must be solid under feet in God Mode');
+
+            // 4. Abyss pit bounce protection in God Mode
+            PACKRAT.player.y = 64 * 16 - 2;
+            PACKRAT.player.vy = 4.0;
+            PACKRAT.step(1);
+            assert.equal(PACKRAT.lives, 99, 'Abyss fall must never deduct lives in God Mode');
+            assert.ok(PACKRAT.player.vy < 0, 'Abyss fall must spring player upward in God Mode');
+
             // Reset God Mode for other tests
             PACKRAT.godMode = false;
             PACKRAT.lives = 3;

@@ -673,6 +673,7 @@
           e.preventDefault();
         }
         break;
+      case 'KeyG':
       case 'KeyI':
         if (!e.ctrlKey && !e.altKey && !e.metaKey && document.activeElement?.tagName !== 'INPUT') {
           toggleGodMode();
@@ -822,6 +823,8 @@
 
   // Table DS:0x366 from PACKRAT.EXE (vertical floor / standable)
   function isTileFloorSolid(id) {
+    if (godMode && id >= 2 && id <= 9) return true; // God Mode: Rat walks on water!
+    if (godMode && (id === 18 || id === 19)) return true; // God Mode: Rat walks safely across mousetraps!
     if (id >= 36) return false; // Illusionary pass-through tiles
     // 1 = Brick, 10 = Dislodgeable Brick, 16 = Ice Cube/Stone, 17 = Thread Spool
     // 20 = Left Spool/Pulley, 21 = Red Rubber Band, 22 = Right Spool/Pulley
@@ -1114,15 +1117,59 @@
     updateHud();
   }
 
+  function showToast(msg, color = '#ffd700') {
+    if (typeof document === 'undefined') return;
+    let toast = document.getElementById('gameToast');
+    if (!toast) {
+      toast = document.createElement('div');
+      toast.id = 'gameToast';
+      toast.style.position = 'absolute';
+      toast.style.top = '14px';
+      toast.style.left = '50%';
+      toast.style.transform = 'translateX(-50%)';
+      toast.style.padding = '8px 18px';
+      toast.style.background = 'rgba(10, 13, 20, 0.94)';
+      toast.style.border = `2px solid ${color}`;
+      toast.style.borderRadius = '20px';
+      toast.style.color = color;
+      toast.style.fontFamily = "'Courier New', monospace";
+      toast.style.fontSize = '12px';
+      toast.style.fontWeight = 'bold';
+      toast.style.letterSpacing = '1px';
+      toast.style.boxShadow = `0 4px 20px rgba(0, 0, 0, 0.8), 0 0 15px ${color}66`;
+      toast.style.pointerEvents = 'none';
+      toast.style.zIndex = '1000';
+      toast.style.transition = 'opacity 0.25s ease, transform 0.25s ease';
+      const container = document.getElementById('crtFrame') || document.body;
+      if (container) {
+        container.style.position = 'relative';
+        container.appendChild(toast);
+      }
+    }
+    toast.textContent = msg;
+    toast.style.borderColor = color;
+    toast.style.color = color;
+    toast.style.boxShadow = `0 4px 20px rgba(0, 0, 0, 0.8), 0 0 15px ${color}66`;
+    toast.style.opacity = '1';
+    toast.style.transform = 'translateX(-50%) translateY(0)';
+    clearTimeout(toast._timeout);
+    toast._timeout = setTimeout(() => {
+      toast.style.opacity = '0';
+      toast.style.transform = 'translateX(-50%) translateY(-8px)';
+    }, 2200);
+  }
+
   function toggleGodMode() {
     godMode = !godMode;
     if (godMode) {
       lives = 99;
       sound.play(2); // Fanfare
       addSparkles(player.x + player.w / 2, player.y + player.h / 2, '#ffd700', 35);
+      showToast('🛡️ GOD MODE: ON (INVINCIBLE + UNLIMITED LIVES)', '#ffd700');
     } else {
       lives = 3;
       sound.play(1);
+      showToast('🛡️ GOD MODE: OFF', '#94a3b8');
     }
     updateHud();
     updateGodModeButton();
@@ -1614,9 +1661,15 @@
     }
 
     // --- Out of Bounds / Pit Fall Death (Photo 2) ---
-    if (player.y + player.h >= MAP_H * TILE_SIZE || (player.y > camera.y + VIRTUAL_H + 20 && player.vy > 0)) {
+    // Only true world bottom (ty >= MAP_H) is a fatal abyss pit. In-level vertical drops must never trigger pit death.
+    if (player.y + player.h >= MAP_H * TILE_SIZE) {
       if (godMode) {
-        player.reset(levelData.startX, levelData.startY);
+        // In God Mode, bounce player back into playfield with golden trampoline bounce
+        player.y = (MAP_H - 2) * TILE_SIZE;
+        player.vy = -9.0;
+        player.onGround = false;
+        sound.play(0);
+        addSparkles(player.x + player.w / 2, player.y + player.h, '#ffd700', 25);
         return;
       }
       killPlayer(4, true); // Instant pit death with sad jingle! (force = true ignores invulnerability)
@@ -2092,7 +2145,7 @@
   // --- Start Game & Mode Changes ---
   function startGame(lvlIdx = 0) {
     score = 0;
-    lives = 3;
+    lives = godMode ? 99 : 3;
     nextLifeScore = 10000;
     currentState = GAME_STATE.PLAYING;
     loadLevel(lvlIdx);
